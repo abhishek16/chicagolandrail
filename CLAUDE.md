@@ -1711,6 +1711,7 @@ jobs:
 | `GET /api/stops?route=BNSF` | Ordered stations for a line |
 | `GET /api/next?route=BNSF&from=X&to=Y&count=3` | The one the app uses: delay-merged trains + alerts + live position + journey stations |
 | `GET /api/alerts?route=BNSF` | Alerts only |
+| `GET /api/timetable?route=BNSF&from=X&to=Y&date=today\|tomorrow` | Full-day scheduled timetable, no realtime merge |
 | `GET /api/meta` | Ingest freshness timestamp |
 
 ## 9. Conventions for future edits

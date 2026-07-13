@@ -15,6 +15,7 @@ let S = Object.assign({ routes: [], activeRouteId: null, settings: null, overrid
 const persist = () => store.save(S);
 
 let lines = [], stations = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
+let ttDay = null; // null = live board; "today"/"tomorrow" = timetable view
 
 // ---------- boot ----------
 init();
@@ -149,6 +150,7 @@ function showMain() {
   $("#route-picker").onchange = e => { S.activeRouteId = e.target.value; persist(); lastSeen.clear(); showMain(); };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup(); };
   $("#reverse-btn").onclick = toggleReverse;
+  $("#tt-btn").onclick = () => { ttDay = ttDay ? null : "today"; refresh(); };
   startPolling();
 }
 
@@ -193,6 +195,9 @@ async function refresh() {
     ? "&#8646; Both"
     : `To ${esc(dir === "HW" ? route.workName : route.homeName)}`;
   const dirs = dir === "BOTH" ? ["HW", "WH"] : [dir];
+
+  $("#tt-btn").classList.toggle("active", !!ttDay);
+  if (ttDay) return renderTimetable(dirs);
 
   let offline = false;
   for (const d of dirs) {
@@ -250,6 +255,49 @@ function render(dirs, offline, overridden) {
   $("#rt-status").innerHTML = first ? (first.realtime ? `<span class="live-dot">live</span>` : "scheduled only") : "";
 }
 
+// Full-day scheduled timetable (today or tomorrow) — no realtime merge.
+async function renderTimetable(dirs) {
+  const route = activeRoute();
+  $("#route-title").innerHTML = dirs.length === 2
+    ? `${esc(route.homeName)} <span class="arrow">⇆</span> ${esc(route.workName)}`
+    : dirTitle(dirs[0]);
+  $("#alerts").innerHTML = "";
+  $("#banner").className = "banner hidden";
+
+  let html = `<div class="tt-tabs">
+    <button data-day="today" class="${ttDay === "today" ? "on" : ""}">Today</button>
+    <button data-day="tomorrow" class="${ttDay === "tomorrow" ? "on" : ""}">Tomorrow</button>
+  </div>`;
+  let note = null;
+  for (const d of dirs) {
+    const [from, to] = d === "HW" ? [route.home, route.work] : [route.work, route.home];
+    html += `<div class="direction-head">${dirTitle(d)}</div>`;
+    try {
+      const data = await api(`/api/timetable?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${ttDay}`);
+      note = note || data.serviceNote;
+      html += data.trains.length
+        ? `<div class="list">` + data.trains.map(t => `
+            <div class="row">
+              <span class="dep">${t.dep}</span>
+              <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</span>
+              <span class="right">→ ${t.arr}</span>
+            </div>`).join("") + `</div>`
+        : `<div class="muted" style="padding:8px 2px 14px">No service that day.</div>`;
+    } catch {
+      html += `<div class="muted" style="padding:8px 2px 14px">Couldn't load timetable.</div>`;
+    }
+  }
+  $("#content").innerHTML = html;
+  if (note) {
+    const b = $("#banner");
+    b.textContent = "Modified schedule (holiday or special service).";
+    b.className = "banner";
+  }
+  document.querySelectorAll(".tt-tabs button").forEach(b => b.onclick = () => { ttDay = b.dataset.day; refresh(); });
+  $("#updated").textContent = ttDay === "tomorrow" ? "Tomorrow's full schedule" : "Today's full schedule";
+  $("#rt-status").textContent = "scheduled times";
+}
+
 function dirTitle(d) {
   const r = activeRoute();
   const [a, b] = d === "HW" ? [r.homeName, r.workName] : [r.workName, r.homeName];
@@ -274,7 +322,7 @@ function sectionHtml(d) {
       <div class="hero-top">
         <span><span class="chip ${next.class}">${next.class === "E" ? "Express" : "Local"}</span>
         ${next.live ? `<span class="live-dot">live</span>` : ""}</span>
-        <span class="train-no">Train ${esc(next.trainNo)}</span>
+        <span class="train-no">Train ${esc(trainNoShort(next.trainNo))}</span>
       </div>
       <div class="times">
         ${next.delayMin > 0 ? `<span class="was">${next.depScheduled}</span>` : ""}${next.dep}
@@ -288,12 +336,12 @@ function sectionHtml(d) {
       </div>
       ${next.cancelled ? "" : journeyBar(data, next, d)}
     </div>
-    ${hint ? `<div class="hint">Express (Train ${esc(hint.trainNo)}) in ${hint.minutes} min — worth waiting?</div>` : ""}
+    ${hint ? `<div class="hint">Express Train ${esc(trainNoShort(hint.trainNo))} leaves at ${hint.dep} (in ${hint.minutes} min) — worth waiting?</div>` : ""}
     <div class="list">
       ${rest.map(t => `
         <div class="row ${t.cancelled ? "cancelled" : ""}">
           <span class="dep">${t.dep}</span>
-          <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(t.trainNo)}</span>
+          <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</span>
           <span class="right">${t.cancelled ? "Cancelled"
             : `<span data-dep="${t.depEpochMs}">${fmtCountdown(t.depEpochMs)}</span>${t.delayMin > 0 ? `<span class="delay">+${t.delayMin}m</span>` : ""}`}</span>
         </div>`).join("")}
@@ -385,9 +433,9 @@ function maybeNotify(d, data) {
     const key = `${d}:${t.tripId}`;
     const prev = lastSeen.get(key) || { delayMin: 0, cancelled: false };
     if (t.cancelled && !prev.cancelled) {
-      new Notification(`Train ${t.trainNo} cancelled`, { body: `${data.from} → ${data.to}, scheduled ${t.depScheduled || t.dep}`, icon: "icons/icon128.png" });
+      new Notification(`Train ${trainNoShort(t.trainNo)} cancelled`, { body: `${data.from} → ${data.to}, scheduled ${t.depScheduled || t.dep}`, icon: "icons/icon128.png" });
     } else if (t.delayMin >= 3 && prev.delayMin < 3) {
-      new Notification(`Train ${t.trainNo} delayed ${t.delayMin} min`, { body: `Now departing ${t.dep}`, icon: "icons/icon128.png" });
+      new Notification(`Train ${trainNoShort(t.trainNo)} delayed ${t.delayMin} min`, { body: `Now departing ${t.dep}`, icon: "icons/icon128.png" });
     }
     lastSeen.set(key, { delayMin: t.delayMin, cancelled: t.cancelled });
   }
@@ -405,3 +453,5 @@ function swapView(name) {
   $("#view-setup").classList.toggle("hidden", name !== "setup");
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+// GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
+function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }

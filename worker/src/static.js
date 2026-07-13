@@ -130,3 +130,32 @@ export async function nextScheduled(env, route, from, to, count = 5) {
     stations: stopsData.stations,
   };
 }
+
+// Full scheduled timetable for one service day (dayOffset 0 = today, 1 = tomorrow).
+// Scheduled times only — no realtime merge.
+export async function timetableFor(env, route, from, to, dayOffset = 0) {
+  const [cal, sched, stopsData] = await Promise.all([
+    kv(env, "cal"), kv(env, `sched:${route}`), kv(env, `stops:${route}`),
+  ]);
+  const now = chicagoParts();
+  const day = dayOffset === 0
+    ? { dateStr: now.dateStr, weekday: now.weekday }
+    : shiftDate(now.dateStr, dayOffset);
+
+  const trains = tripsBetween(sched, stopsData, from, to, activeServices(cal, day.dateStr, day.weekday), 0)
+    .sort((a, b) => a.depSec - b.depSec)
+    .map(t => ({
+      trainNo: t.trainNo,
+      dep: secToClock(t.depSec),
+      arr: secToClock(t.arrSec),
+      class: t.class,
+      skipped: t.skipped,
+    }));
+
+  return {
+    route, from, to,
+    date: day.dateStr,
+    serviceNote: (cal.ex[day.dateStr] || []).length ? "modified" : null,
+    trains,
+  };
+}

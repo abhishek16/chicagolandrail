@@ -8,7 +8,7 @@
 //   - optional Cloudflare rate-limiting rule on the route (real quota control)
 // The Metra API key stays server-side in a Worker secret regardless.
 
-import { kv, json as baseJson, bad, nextScheduled, secToClock } from "./static.js";
+import { kv, json as baseJson, bad, nextScheduled, timetableFor, secToClock } from "./static.js";
 import { fetchFeed, indexTripUpdates, delayAt, alertsForRoute, positionFor } from "./realtime.js";
 
 function cors(env) {
@@ -56,6 +56,14 @@ export default {
           if (!route) throw bad("route parameter required");
           const feed = await fetchFeed(env, "alerts", waitUntil);
           return json(env, { route, alerts: alertsForRoute(feed, route) }, 200, 30);
+        }
+        case "/api/timetable": {
+          const route = url.searchParams.get("route");
+          const from = url.searchParams.get("from");
+          const to = url.searchParams.get("to");
+          if (!route || !from || !to) throw bad("route, from, to parameters required");
+          const day = url.searchParams.get("date") === "tomorrow" ? 1 : 0;
+          return json(env, await timetableFor(env, route, from, to, day), 200, 300);
         }
         case "/api/next":
           return handleNext(url, env, waitUntil);

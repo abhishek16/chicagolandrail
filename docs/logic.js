@@ -73,7 +73,7 @@ export function expressHint(trains) {
   const ex = trains.find(t => t.class === "E");
   if (!ex) return null;
   const mins = Math.round((ex.depEpochMs - Date.now()) / 60000);
-  return mins <= 30 ? { trainNo: ex.trainNo, minutes: mins } : null;
+  return mins <= 30 ? { trainNo: ex.trainNo, minutes: mins, dep: ex.dep } : null;
 }
 
 export function fmtCountdown(epochMs) {
