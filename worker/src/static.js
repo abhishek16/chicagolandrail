@@ -86,7 +86,7 @@ export function tripsBetween(sched, stopsData, from, to, services, dayOffsetSec)
       headsign: t.head,
       depSec: t.st[a][2] + dayOffsetSec,
       arrSec: t.st[b][1] + dayOffsetSec,
-      class: skipped >= 1 ? "E" : "L",
+      class: skipped > 8 ? "E" : "L",
       skipped,
       interTotal: interStops.length,
     });

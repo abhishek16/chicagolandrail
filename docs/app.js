@@ -152,13 +152,19 @@ function showMain() {
   startPolling();
 }
 
+// Cycle direction: natural → HW → WH → back to natural (skipping duplicates),
+// so every state is reachable even when the natural direction is BOTH.
 function toggleReverse() {
   const now = new Date();
-  const current = resolveDirection(settings(), S.override, now, false);
-  const natural = resolveDirection(settings(), { active: false }, now, false);
-  const isActive = S.override.active && Date.now() < S.override.expiresAt;
-  const flipped = current === "HW" ? "WH" : current === "WH" ? "HW" : (natural === "HW" ? "WH" : "HW");
-  S.override = isActive ? { active: false } : { active: true, direction: flipped, expiresAt: overrideExpiry(settings(), now) };
+  const modified = Object.values(lastData).some(d => d && d.serviceNote);
+  const natural = resolveDirection(settings(), { active: false }, now, modified);
+  const current = resolveDirection(settings(), S.override, now, modified);
+  let next;
+  if (natural === "BOTH") next = current === "BOTH" ? "HW" : current === "HW" ? "WH" : "BOTH";
+  else next = current === natural ? (natural === "HW" ? "WH" : "HW") : natural;
+  S.override = next === natural
+    ? { active: false }
+    : { active: true, direction: next, expiresAt: overrideExpiry(settings(), now) };
   persist(); refresh();
 }
 
@@ -183,6 +189,9 @@ async function refresh() {
   const overridden = S.override.active && Date.now() < S.override.expiresAt;
   $("#reverse-btn").classList.toggle("active", overridden);
   const dir = resolveDirection(settings(), S.override, new Date(), modified);
+  $("#reverse-btn").innerHTML = dir === "BOTH"
+    ? "&#8646; Both"
+    : `To ${esc(dir === "HW" ? route.workName : route.homeName)}`;
   const dirs = dir === "BOTH" ? ["HW", "WH"] : [dir];
 
   let offline = false;
@@ -238,7 +247,7 @@ function render(dirs, offline, overridden) {
   updateBadge(bestTrain(dirs), anyAlert, cancelledNext);
 
   $("#updated").textContent = first ? `Updated ${new Date(first.fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : "";
-  $("#rt-status").textContent = first ? (first.realtime ? "● live" : "scheduled only") : "";
+  $("#rt-status").innerHTML = first ? (first.realtime ? `<span class="live-dot">live</span>` : "scheduled only") : "";
 }
 
 function dirTitle(d) {

@@ -55,8 +55,8 @@ Browser (GitHub Pages, docs/) ──fetch──► Cloudflare Worker (worker/)
    station names don't resolve or express counts look wrong.
 5. Keep all `docs/` asset paths **relative** (`./app.js`, `icons/...`) so the site
    works both at a project subpath (`user.github.io/repo/`) and a root user-site.
-6. Preserve express rule = *any skipped intermediate stop between the rider's two
-   stations*. Time math is always `America/Chicago`.
+6. Preserve express rule = *more than 8 skipped intermediate stops between the
+   rider's two stations* (`skipped > 8`). Time math is always `America/Chicago`.
 
 ## 4. Repo layout
 
@@ -1228,7 +1228,7 @@ export function tripsBetween(sched, stopsData, from, to, services, dayOffsetSec)
       headsign: t.head,
       depSec: t.st[a][2] + dayOffsetSec,
       arrSec: t.st[b][1] + dayOffsetSec,
-      class: skipped >= 1 ? "E" : "L",
+      class: skipped > 8 ? "E" : "L",
       skipped,
       interTotal: interStops.length,
     });
@@ -1616,7 +1616,7 @@ async function main() {
         if (a === -1 || b === -1 || a >= b) continue;
         const served = new Set(ids);
         const skipped = inter.filter(s => !served.has(s)).length;
-        skipped >= 1 ? ex++ : loc++;
+        skipped > 8 ? ex++ : loc++;
       }
       console.log(`\nValidation — BNSF ${nap.name} → ${cus.name}: ${inter.length} intermediate stations, ${ex} express trips, ${loc} local trips`);
     } else {

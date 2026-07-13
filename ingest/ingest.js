@@ -188,7 +188,7 @@ async function main() {
         if (a === -1 || b === -1 || a >= b) continue;
         const served = new Set(ids);
         const skipped = inter.filter(s => !served.has(s)).length;
-        skipped >= 1 ? ex++ : loc++;
+        skipped > 8 ? ex++ : loc++;
       }
       console.log(`\nValidation — BNSF ${nap.name} → ${cus.name}: ${inter.length} intermediate stations, ${ex} express trips, ${loc} local trips`);
     } else {
