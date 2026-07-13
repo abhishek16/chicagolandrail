@@ -1,0 +1,14 @@
+{
+  "name": "metra-gtfs-ingest",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "ingest": "node ingest.js",
+    "dry-run": "node ingest.js --dry-run"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.14",
+    "csv-parse": "^5.5.6"
+  }
+}

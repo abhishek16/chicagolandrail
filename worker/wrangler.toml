@@ -1,0 +1,16 @@
+name = "metra-proxy"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+
+# 1) Create KV:  npx wrangler kv namespace create GTFS   → paste id below
+[[kv_namespaces]]
+binding = "GTFS"
+id = "6cf1b8248edd4bee82fb8b77065610b1"
+
+[vars]
+# Set to your GitHub Pages origin to lock CORS (recommended before launch).
+# Examples: "https://abhishek16.github.io"  (user site or project site share this origin)
+# Leave "*" while testing.
+ALLOWED_ORIGIN = "*"
+
+# 2) Metra key as a secret:  npx wrangler secret put METRA_API_KEY

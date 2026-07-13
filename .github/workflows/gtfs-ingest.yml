@@ -1,0 +1,24 @@
+name: GTFS ingest
+
+on:
+  schedule:
+    - cron: "20 8 * * *"   # ~3:20 AM Central (UTC-based; DST shifts it 1h — acceptable)
+  workflow_dispatch: {}     # manual runs
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+        working-directory: ingest
+      - run: node ingest.js
+        working-directory: ingest
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+          METRA_API_KEY: ${{ secrets.METRA_API_KEY }}

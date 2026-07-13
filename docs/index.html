@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chicagoland Rail</title>
+  <meta name="description" content="Your next Chicagoland commuter train, with live delays and service alerts.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" id="favicon" href="icons/icon32.png">
+  <meta name="theme-color" content="#005A45">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ============ MAIN VIEW ============ -->
+    <div id="view-main" class="view hidden">
+      <header>
+        <div id="line-accent"></div>
+        <div class="header-row">
+          <select id="route-picker" aria-label="Switch route"></select>
+          <div class="header-actions">
+            <button id="reverse-btn" title="Reverse direction">&#8646;</button>
+            <button id="settings-btn" title="Settings">&#9881;</button>
+          </div>
+        </div>
+        <h1 id="route-title"></h1>
+      </header>
+
+      <div id="alerts"></div>
+      <div id="banner" class="banner hidden"></div>
+      <main id="content">
+        <div class="muted center">Loading trains…</div>
+      </main>
+      <footer>
+        <span id="updated"></span>
+        <span id="rt-status"></span>
+      </footer>
+      <p class="disclaimer">Not affiliated with or endorsed by Metra. Schedule and service data provided by Metra.</p>
+    </div>
+
+    <!-- ============ ONBOARDING / SETTINGS VIEW ============ -->
+    <div id="view-setup" class="view hidden">
+      <header class="setup-header">
+        <div id="line-accent-2"></div>
+        <h1>Chicagoland Rail</h1>
+        <p class="muted">Your next train, live delays, and service alerts — set up once.</p>
+      </header>
+      <main>
+        <section>
+          <h2>Your routes <span class="muted small" id="route-count"></span></h2>
+          <div id="route-list"></div>
+          <div class="card">
+            <label>Line <select id="line"><option value="">Loading lines…</option></select></label>
+            <label>Home station
+              <input id="home" list="home-list" placeholder="Type to search…" autocomplete="off">
+              <datalist id="home-list"></datalist>
+            </label>
+            <label>Work station
+              <input id="work" list="work-list" placeholder="Type to search…" autocomplete="off">
+              <datalist id="work-list"></datalist>
+            </label>
+            <label>Label (optional) <input id="label" placeholder="Daily commute"></label>
+            <button id="save-route" class="primary">Save route</button>
+            <p id="form-error" class="error hidden"></p>
+          </div>
+        </section>
+
+        <section>
+          <h2>Direction windows</h2>
+          <div class="grid2">
+            <label>Morning starts <input id="m0" type="time"></label>
+            <label>Morning ends <input id="m1" type="time"></label>
+            <label>Evening starts <input id="e0" type="time"></label>
+            <label>Evening ends <input id="e1" type="time"></label>
+          </div>
+          <p class="muted small">Morning shows Home → Work, evening Work → Home. Outside those windows, weekends, and holidays show both directions.</p>
+        </section>
+
+        <section>
+          <h2>Notifications</h2>
+          <label class="check"><input type="checkbox" id="notif-toggle"> Notify me about new delays and cancellations while this page is open</label>
+          <p id="notif-note" class="muted small"></p>
+        </section>
+
+        <div class="actions">
+          <button id="save-settings" class="primary">Save &amp; view trains</button>
+          <span id="saved-note" class="muted small hidden">Saved.</span>
+        </div>
+        <p class="disclaimer">Not affiliated with or endorsed by Metra. Schedule and service data provided by Metra.</p>
+      </main>
+    </div>
+
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
