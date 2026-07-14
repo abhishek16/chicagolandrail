@@ -149,24 +149,37 @@ function showMain() {
     `<option value="${r.id}" ${r.id === route.id ? "selected" : ""}>${esc(r.label)}</option>`).join("");
   $("#route-picker").onchange = e => { S.activeRouteId = e.target.value; persist(); lastSeen.clear(); showMain(); };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup(); };
-  $("#reverse-btn").onclick = toggleReverse;
-  $("#tt-btn").onclick = () => { ttDay = ttDay ? null : "today"; refresh(); };
   startPolling();
 }
 
-// Cycle direction: natural → HW → WH → back to natural (skipping duplicates),
-// so every state is reachable even when the natural direction is BOTH.
-function toggleReverse() {
+// Segmented controls: view (live board / today / tomorrow) + direction.
+function renderControls(dir) {
+  const r = activeRoute();
+  const view = ttDay || "live";
+  $("#view-tabs").innerHTML = [["live", "Live"], ["today", "Today"], ["tomorrow", "Tomorrow"]]
+    .map(([v, l]) => `<button data-v="${v}" class="${view === v ? "on" : ""}" role="tab" aria-selected="${view === v}">${l}</button>`).join("");
+  $("#view-tabs").querySelectorAll("button").forEach(b =>
+    b.onclick = () => { ttDay = b.dataset.v === "live" ? null : b.dataset.v; refresh(); });
+
+  const opts = [
+    ["BOTH", "&#8646; Both"],
+    ["HW", `To ${esc(r.workName)}`],
+    ["WH", `To ${esc(r.homeName)}`],
+  ];
+  $("#dir-tabs").innerHTML = opts
+    .map(([v, l]) => `<button data-d="${v}" class="${dir === v ? "on" : ""}" role="tab" aria-selected="${dir === v}">${l}</button>`).join("");
+  $("#dir-tabs").querySelectorAll("button").forEach(b => b.onclick = () => setDirection(b.dataset.d));
+}
+
+// Picking the natural direction clears the override; anything else pins the
+// choice until the next direction-window boundary.
+function setDirection(d) {
   const now = new Date();
-  const modified = Object.values(lastData).some(d => d && d.serviceNote);
+  const modified = Object.values(lastData).some(x => x && x.serviceNote);
   const natural = resolveDirection(settings(), { active: false }, now, modified);
-  const current = resolveDirection(settings(), S.override, now, modified);
-  let next;
-  if (natural === "BOTH") next = current === "BOTH" ? "HW" : current === "HW" ? "WH" : "BOTH";
-  else next = current === natural ? (natural === "HW" ? "WH" : "HW") : natural;
-  S.override = next === natural
+  S.override = d === natural
     ? { active: false }
-    : { active: true, direction: next, expiresAt: overrideExpiry(settings(), now) };
+    : { active: true, direction: d, expiresAt: overrideExpiry(settings(), now) };
   persist(); refresh();
 }
 
@@ -188,15 +201,9 @@ async function refresh() {
   if (!route) return showSetup();
 
   const modified = Object.values(lastData).some(d => d && d.serviceNote);
-  const overridden = S.override.active && Date.now() < S.override.expiresAt;
-  $("#reverse-btn").classList.toggle("active", overridden);
   const dir = resolveDirection(settings(), S.override, new Date(), modified);
-  $("#reverse-btn").innerHTML = dir === "BOTH"
-    ? "&#8646; Both"
-    : `To ${esc(dir === "HW" ? route.workName : route.homeName)}`;
   const dirs = dir === "BOTH" ? ["HW", "WH"] : [dir];
-
-  $("#tt-btn").classList.toggle("active", !!ttDay);
+  renderControls(dir);
   if (ttDay) return renderTimetable(dirs);
 
   let offline = false;
@@ -212,10 +219,10 @@ async function refresh() {
     }
   }
 
-  render(dirs, offline, overridden);
+  render(dirs, offline);
 }
 
-function render(dirs, offline, overridden) {
+function render(dirs, offline) {
   const route = activeRoute();
   const first = lastData[dirs[0]];
 
@@ -264,10 +271,7 @@ async function renderTimetable(dirs) {
   $("#alerts").innerHTML = "";
   $("#banner").className = "banner hidden";
 
-  let html = `<div class="tt-tabs">
-    <button data-day="today" class="${ttDay === "today" ? "on" : ""}">Today</button>
-    <button data-day="tomorrow" class="${ttDay === "tomorrow" ? "on" : ""}">Tomorrow</button>
-  </div>`;
+  let html = "";
   let note = null;
   for (const d of dirs) {
     const [from, to] = d === "HW" ? [route.home, route.work] : [route.work, route.home];
@@ -276,7 +280,7 @@ async function renderTimetable(dirs) {
       const data = await api(`/api/timetable?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${ttDay}`);
       note = note || data.serviceNote;
       html += data.trains.length
-        ? `<div class="list">` + data.trains.map(t => `
+        ? `<div class="list tt">` + data.trains.map(t => `
             <div class="row">
               <span class="dep">${t.dep}</span>
               <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</span>
@@ -293,7 +297,6 @@ async function renderTimetable(dirs) {
     b.textContent = "Modified schedule (holiday or special service).";
     b.className = "banner";
   }
-  document.querySelectorAll(".tt-tabs button").forEach(b => b.onclick = () => { ttDay = b.dataset.day; refresh(); });
   $("#updated").textContent = ttDay === "tomorrow" ? "Tomorrow's full schedule" : "Today's full schedule";
   $("#rt-status").textContent = "scheduled times";
 }
