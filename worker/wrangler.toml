@@ -13,4 +13,14 @@ id = "6cf1b8248edd4bee82fb8b77065610b1"
 # Leave "*" while testing.
 ALLOWED_ORIGIN = "https://abhishek16.github.io"
 
+# Web Push (background alerts). Public VAPID key + contact are public; the
+# private key is a secret:  npx wrangler secret put VAPID_PRIVATE_JWK
+VAPID_PUBLIC = "BHMlUTF-D-kjj9yMfm6dSNmWVI3hvU1MFpHCZDWIMTRQeOktlRak5tpHFxe8dj4072NIXweOUgR6201Z5OSDwyg"
+VAPID_SUBJECT = "mailto:resoluteacc@gmail.com"
+
+# Background push runs on a cron trigger (every 2 minutes).
+[triggers]
+crons = ["*/2 * * * *"]
+
 # 2) Metra key as a secret:  npx wrangler secret put METRA_API_KEY
+# 3) VAPID private key secret:  npx wrangler secret put VAPID_PRIVATE_JWK

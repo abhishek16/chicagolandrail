@@ -1712,6 +1712,16 @@ jobs:
 | `GET /api/next?route=BNSF&from=X&to=Y&count=3` | The one the app uses: delay-merged trains + alerts + live position + journey stations |
 | `GET /api/alerts?route=BNSF` | Alerts only |
 | `GET /api/timetable?route=BNSF&from=X&to=Y&date=today\|tomorrow\|YYYYMMDD` | Full-day scheduled timetable for any date (incl. weekends), no realtime merge |
+| `GET /api/push/key` | VAPID public key for Web Push subscription |
+| `POST /api/push/subscribe` | Body `{subscription, lines[]}` — register for background alerts |
+| `POST /api/push/unsubscribe` | Body `{endpoint}` — remove a subscription |
+
+**Background push:** a Worker cron (`*/2 * * * *`, see `wrangler.toml` `[triggers]`)
+runs `poller.js`, which diffs the realtime feed against `pushstate:<line>` in KV and
+sends Web Push (VAPID + RFC 8291 aes128gcm, all WebCrypto in `push.js`) to each
+`sub:<hash>` subscriber. Secrets: `VAPID_PRIVATE_JWK` (Worker secret); public key +
+`VAPID_SUBJECT` are `[vars]`. iOS delivers Web Push only to a Safari-installed PWA
+(iOS 16.4+), not to Chrome/other iOS browsers.
 | `GET /api/meta` | Ingest freshness timestamp |
 
 ## 9. Conventions for future edits

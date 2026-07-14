@@ -10,12 +10,13 @@
 
 import { kv, json as baseJson, bad, nextScheduled, timetableFor, secToClock, chicagoParts, shiftDate } from "./static.js";
 import { fetchFeed, indexTripUpdates, delayAt, alertsForRoute, positionFor } from "./realtime.js";
+import { runPushCycle } from "./poller.js";
 
 function cors(env) {
   const origin = env.ALLOWED_ORIGIN || "*";
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
@@ -32,13 +33,20 @@ function json(env, data, status = 200, cacheSeconds = 0) {
 export default {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
-    if (request.method !== "GET") return json(env, { error: "method not allowed" }, 405);
 
     const url = new URL(request.url);
     const waitUntil = ctx.waitUntil.bind(ctx);
 
     try {
+      if (request.method === "POST") {
+        if (url.pathname === "/api/push/subscribe") return pushSubscribe(request, env);
+        if (url.pathname === "/api/push/unsubscribe") return pushUnsubscribe(request, env);
+        return json(env, { error: "not found" }, 404);
+      }
+      if (request.method !== "GET") return json(env, { error: "method not allowed" }, 405);
       switch (url.pathname) {
+        case "/api/push/key":
+          return json(env, { key: env.VAPID_PUBLIC || null }, 200, 3600);
         case "/api/meta": {
           const meta = await env.GTFS.get("meta", "json");
           return json(env, meta || { error: "no data ingested yet" }, meta ? 200 : 503, 300);
@@ -73,7 +81,32 @@ export default {
       return json(env, { error: e.message || String(e) }, e.status || 500);
     }
   },
+
+  // Cron trigger — send background push notifications for new delays/alerts.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runPushCycle(env));
+  },
 };
+
+async function sha256hex(s) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function pushSubscribe(request, env) {
+  const { subscription, lines } = await request.json();
+  if (!subscription || !subscription.endpoint) throw bad("subscription with endpoint required");
+  const key = "sub:" + await sha256hex(subscription.endpoint);
+  await env.GTFS.put(key, JSON.stringify({ subscription, lines: Array.isArray(lines) ? lines : [], updatedAt: Date.now() }));
+  return json(env, { ok: true });
+}
+
+async function pushUnsubscribe(request, env) {
+  const { endpoint } = await request.json();
+  if (!endpoint) throw bad("endpoint required");
+  await env.GTFS.delete("sub:" + await sha256hex(endpoint));
+  return json(env, { ok: true });
+}
 
 async function handleNext(url, env, waitUntil) {
   const route = url.searchParams.get("route");

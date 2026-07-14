@@ -48,7 +48,7 @@ export function indexTripUpdates(feed) {
       arrTime: s.arrival && s.arrival.time ? Number(s.arrival.time) : null,
       skipped: CANCEL_VALUES.has(s.scheduleRelationship) || s.scheduleRelationship === 1 || s.scheduleRelationship === "SKIPPED",
     }));
-    byTrip.set(tripId, { cancelled, tripDelay: tu.delay != null ? tu.delay : null, stus });
+    byTrip.set(tripId, { cancelled, routeId: tu.trip.routeId || null, tripDelay: tu.delay != null ? tu.delay : null, stus });
   }
   return byTrip;
 }

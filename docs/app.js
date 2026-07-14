@@ -32,6 +32,7 @@ async function init() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").then(r => swReg = r).catch(() => {});
   try { lines = await api("/api/lines"); } catch { lines = []; }
   if (!activeRoute()) showSetup(); else showMain();
+  syncPush(); // refresh push subscription + line list on load
 }
 
 function activeRoute() { return S.routes.find(r => r.id === S.activeRouteId) || S.routes[0] || null; }
@@ -41,6 +42,49 @@ async function api(path) {
   const res = await fetch(API_BASE + path);
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return res.json();
+}
+
+async function apiPost(path, body) {
+  const res = await fetch(API_BASE + path, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${path} → ${res.status}`);
+  return res.json();
+}
+
+// ---------- background push (Web Push) ----------
+function urlB64ToUint8(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const s = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(s);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+// Subscribe (or refresh the subscribed line list) for background alerts.
+async function subscribePush() {
+  try {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const reg = swReg || await navigator.serviceWorker.ready;
+    if (!reg || !reg.pushManager) return;
+    const { key } = await api("/api/push/key");
+    if (!key) return;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) });
+    await apiPost("/api/push/subscribe", { subscription: sub.toJSON(), lines: [...new Set(S.routes.map(r => r.line))] });
+  } catch { /* push unsupported/blocked — in-page notifications still work */ }
+}
+
+async function unsubscribePush() {
+  try {
+    const reg = swReg || await navigator.serviceWorker.ready;
+    const sub = reg && reg.pushManager && await reg.pushManager.getSubscription();
+    if (sub) { await apiPost("/api/push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+  } catch { /* ignore */ }
+}
+
+// Keep the server's line list current whenever routes change (if alerts are on).
+function syncPush() {
+  if (S.notify && "Notification" in window && Notification.permission === "granted") subscribePush();
 }
 
 function lineColor(routeLine) {
@@ -73,18 +117,24 @@ function showSetup() {
   $("#e0").value = st.eveningWindow[0]; $("#e1").value = st.eveningWindow[1];
   $("#notif-toggle").checked = !!S.notify;
   $("#notif-note").textContent = ("Notification" in window)
-    ? "Notifications appear only while a tab with this site is open."
+    ? "Get alerts for new delays, cancellations, and service alerts — even when the app is closed. On iPhone, first add this app to your Home Screen from Safari."
     : "This browser doesn't support notifications.";
 
   renderRouteList();
   $("#save-route").onclick = saveRoute;
   $("#save-settings").onclick = saveSettings;
   $("#notif-toggle").onchange = async e => {
-    if (e.target.checked && Notification.permission !== "granted") {
-      const p = await Notification.requestPermission();
-      if (p !== "granted") { e.target.checked = false; return; }
+    if (e.target.checked) {
+      if (Notification.permission !== "granted") {
+        const p = await Notification.requestPermission();
+        if (p !== "granted") { e.target.checked = false; return; }
+      }
+      S.notify = true; persist();
+      await subscribePush();
+    } else {
+      S.notify = false; persist();
+      await unsubscribePush();
     }
-    S.notify = e.target.checked; persist();
   };
 }
 
@@ -93,10 +143,11 @@ function findStation(name) {
   return stations.find(s => s.name.toLowerCase() === n) || stations.find(s => s.name.toLowerCase().includes(n));
 }
 
+// Returns true if a route was saved, false (with an inline error) if not.
 function saveRoute() {
   const err = $("#form-error"); err.classList.add("hidden");
   const line = $("#line").value, home = findStation($("#home").value), work = findStation($("#work").value);
-  const fail = m => { err.textContent = m; err.classList.remove("hidden"); };
+  const fail = m => { err.textContent = m; err.classList.remove("hidden"); return false; };
   if (!line || !home || !work) return fail("Pick a line and valid home & work stations.");
   if (home.id === work.id) return fail("Home and work stations must be different.");
   if (S.routes.length >= 5) return fail("Route limit reached (5). Remove one first.");
@@ -111,12 +162,22 @@ function saveRoute() {
   persist();
   $("#home").value = $("#work").value = $("#label").value = "";
   renderRouteList();
+  syncPush();
+  return true;
+}
+
+// True if the user has started filling the add-route form.
+function routeFormDirty() {
+  return !!($("#line").value || $("#home").value.trim() || $("#work").value.trim());
 }
 
 function renderRouteList() {
   const el = $("#route-list");
-  $("#route-count").textContent = S.routes.length ? `(${S.routes.length}/5)` : "";
-  el.innerHTML = S.routes.length ? "" : `<p class="muted small">No routes yet — add your commute below.</p>`;
+  const has = S.routes.length;
+  $("#route-count").textContent = has ? `(${S.routes.length}/5)` : "";
+  el.innerHTML = has ? "" : `<p class="muted small">No routes yet — pick your line and stations below, then tap <b>Save route</b>.</p>`;
+  const done = $("#save-settings");
+  if (done) done.textContent = has ? "Save & view trains" : "Save route & view trains";
   for (const r of S.routes) {
     const div = document.createElement("div");
     div.className = "route-item" + (r.id === S.activeRouteId ? " active" : "");
@@ -130,21 +191,30 @@ function renderRouteList() {
         S.routes = S.routes.filter(x => x.id !== r.id);
         if (S.activeRouteId === r.id) S.activeRouteId = S.routes[0]?.id || null;
       }
-      persist(); renderRouteList();
+      persist(); renderRouteList(); syncPush();
     });
     el.appendChild(div);
   }
 }
 
 function saveSettings() {
+  // If the form has an unsaved commute, commit it now — so a user who fills the
+  // form and taps "Save & view trains" (without first tapping "Save route")
+  // isn't stuck on a button that appears to do nothing.
+  if (routeFormDirty() && !saveRoute()) return; // saveRoute surfaces its own error
   S.settings = {
     ...settings(),
     morningWindow: [$("#m0").value || "05:00", $("#m1").value || "11:00"],
     eveningWindow: [$("#e0").value || "12:00", $("#e1").value || "23:59"],
   };
   persist();
-  if (activeRoute()) showMain();
-  else { $("#saved-note").classList.remove("hidden"); setTimeout(() => $("#saved-note").classList.add("hidden"), 1500); }
+  if (activeRoute()) return showMain();
+  // Nothing to show yet — point the user at the one required step.
+  const err = $("#form-error");
+  err.textContent = "Add your commute above (line, home, and work stations) to get started.";
+  err.classList.remove("hidden");
+  $("#line").focus();
+  document.querySelector(".card").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 // ============================================================
@@ -206,7 +276,7 @@ function loadWidgets() {
 function renderControls(dir) {
   const r = activeRoute();
   const view = ttDate ? "schedule" : "live";
-  $("#view-tabs").innerHTML = [["live", "Live"], ["schedule", "Schedule"]]
+  $("#view-tabs").innerHTML = [["live", "● Live"], ["schedule", "🗓 Schedule"]]
     .map(([v, l]) => `<button data-v="${v}" class="${view === v ? "on" : ""}" role="tab" aria-selected="${view === v}">${l}</button>`).join("");
   $("#view-tabs").querySelectorAll("button").forEach(b =>
     b.onclick = () => { ttDate = b.dataset.v === "live" ? null : (ttDate || todayISO()); refresh(); });
