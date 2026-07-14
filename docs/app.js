@@ -375,7 +375,7 @@ function render(dirs, offline) {
 
   const anyAlert = seen.size > 0;
   const cancelledNext = dirs.some(d => lastData[d]?.trains?.[0]?.cancelled);
-  updateBadge(bestTrain(dirs), anyAlert, cancelledNext);
+  updateBadge(bestTrain(dirs), anyAlert, cancelledNext, dirs);
 
   $("#updated").textContent = first ? `Updated ${new Date(first.fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : "";
   $("#rt-status").innerHTML = first ? (first.realtime ? `<span class="live-dot">live</span>` : "scheduled only") : "";
@@ -424,6 +424,7 @@ async function renderTimetable(dirs) {
   $("#tt-date").onchange = e => { if (e.target.value) { ttDate = e.target.value; refresh(); } };
   $("#updated").textContent = new Date(ttDate + "T00:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
   $("#rt-status").textContent = "scheduled times";
+  document.title = `${dirLabel(dirs)} · Schedule`;
 }
 
 // ---------- date helpers (local time; riders are in Chicago) ----------
@@ -574,7 +575,22 @@ function bestTrain(dirs) {
   return best;
 }
 
-function updateBadge(next, hasAlert, cancelledNext) {
+// Short station label for the tab title: first word, but keep a trailing number
+// so "Route 59" doesn't collapse to a bare "Route".
+function shortStation(name) {
+  const parts = String(name).split(" ");
+  return parts[1] && /^\d/.test(parts[1]) ? `${parts[0]} ${parts[1]}` : parts[0];
+}
+
+// "A → B" for a single direction, "A ⇆ B" for both — matches the on-screen heading.
+function dirLabel(dirs) {
+  const r = activeRoute();
+  if (!dirs || dirs.length === 2) return `${shortStation(r.homeName)} ⇆ ${shortStation(r.workName)}`;
+  const [from, to] = dirs[0] === "HW" ? [r.homeName, r.workName] : [r.workName, r.homeName];
+  return `${shortStation(from)} → ${shortStation(to)}`;
+}
+
+function updateBadge(next, hasAlert, cancelledNext, dirs) {
   const mins = next ? Math.max(0, Math.round((next.depEpochMs - Date.now()) / 60000)) : null;
   const text = next ? (mins > 99 ? "99+" : `${mins}${next.class}`) : "--";
   const color = cancelledNext ? "#B3261E" : hasAlert ? "#B45309" : next ? "#1D9E75" : "#8A8F98";
@@ -589,10 +605,8 @@ function updateBadge(next, hasAlert, cancelledNext) {
   g.fillText(text, 16, 17);
   $("#favicon").href = c.toDataURL("image/png");
 
-  const r = activeRoute();
-  document.title = next
-    ? `${mins}m ${next.class} · ${r.homeName.split(" ")[0]} ⇆ ${r.workName.split(" ")[0]}`
-    : "Chicagoland Rail";
+  const label = dirLabel(dirs);
+  document.title = next ? `${mins}m ${next.class} · ${label}` : `${label} · Chicagoland Rail`;
 }
 
 // ---------- notifications ----------
