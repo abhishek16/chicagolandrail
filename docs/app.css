@@ -198,6 +198,16 @@ details.social summary a { color: var(--line); text-decoration: none; }
 
 .list { border-top: 1px solid var(--border); }
 .list.tt .right { color: var(--muted); }
+.list.tt .right .dur { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Express trains get a warm accent bar + tint so they pop in the timetable. */
+.list.tt .row.express {
+  box-shadow: inset 3px 0 0 var(--express);
+  background: linear-gradient(90deg, rgba(180, 83, 9, 0.09), rgba(180, 83, 9, 0));
+  padding-left: 10px;
+}
+.list.tt .row.express .dep { color: var(--express); }
+.list.tt .row.express .meta .chip.E { margin-right: 4px; }
 .row {
   display: grid; grid-template-columns: 82px 1fr auto; gap: 10px; align-items: center;
   padding: 12px 4px; border-bottom: 1px solid var(--border);

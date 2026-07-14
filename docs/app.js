@@ -404,10 +404,12 @@ async function renderTimetable(dirs) {
       note = note || data.serviceNote;
       html += data.trains.length
         ? `<div class="list tt">` + data.trains.map(t => `
-            <div class="row">
+            <div class="row ${t.class === "E" ? "express" : ""}">
               <span class="dep">${t.dep}</span>
-              <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</span>
-              <span class="right">→ ${t.arr}</span>
+              <span class="meta">${t.class === "E"
+                ? `<span class="chip E">Express</span> Train ${esc(trainNoShort(t.trainNo))}`
+                : `Local · Train ${esc(trainNoShort(t.trainNo))}`}</span>
+              <span class="right">→ ${t.arr}${t.durMin ? `<span class="dur">${fmtDur(t.durMin)}</span>` : ""}</span>
             </div>`).join("") + `</div>`
         : `<div class="muted" style="padding:8px 2px 14px">No service that day.</div>`;
     } catch {
@@ -651,3 +653,4 @@ function swapView(name) {
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 // GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
 function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }
+function fmtDur(min) { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h ${m}m` : `${m}m`; }
