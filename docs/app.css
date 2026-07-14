@@ -141,6 +141,36 @@ main#content { padding: 16px; flex: 1; }
 
 .hint { font-size: 13px; color: var(--express); margin: 0 0 12px; padding: 0 2px; }
 
+/* ---- schedule date bar ---- */
+.datebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 2px 0 16px; }
+.chip-day {
+  background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.chip-day:hover:not(.on) { color: var(--text); }
+.chip-day.on { background: var(--line); border-color: var(--line); color: #fff; font-weight: 600; }
+#tt-date {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 10px; padding: 6px 10px; font-size: 13px; margin-left: auto;
+}
+
+/* ---- X (twitter) service updates ---- */
+#social { padding: 0 16px 4px; }
+details.social {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+}
+details.social summary {
+  padding: 12px 14px; font-size: 13px; font-weight: 600; cursor: pointer; list-style: none;
+}
+details.social summary::-webkit-details-marker { display: none; }
+details.social summary::after { content: " ▾"; color: var(--muted); font-weight: 400; }
+details.social[open] summary::after { content: " ▴"; }
+details.social summary a { color: var(--line); text-decoration: none; }
+.social-body { padding: 0 12px 12px; }
+.social-fallback { margin-top: 8px; }
+.social-fallback a { color: var(--line); }
+
 .list { border-top: 1px solid var(--border); }
 .list.tt .right { color: var(--muted); }
 .row {

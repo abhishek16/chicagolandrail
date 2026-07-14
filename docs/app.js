@@ -15,12 +15,21 @@ let S = Object.assign({ routes: [], activeRouteId: null, settings: null, overrid
 const persist = () => store.save(S);
 
 let lines = [], stations = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
-let ttDay = null; // null = live board; "today"/"tomorrow" = timetable view
+let ttDate = null;               // null = live board; "YYYY-MM-DD" = schedule for that day
+let swReg = null;                // service-worker registration, for OS notifications
+let notifiedAlerts = new Set();  // alert ids we've already notified about
+
+// Metra's per-line service-update accounts on X (twitter). Falls back to @Metra.
+const X_HANDLES = {
+  BNSF: "metraBNSF", "MD-N": "metraMDN", "MD-W": "metraMDW",
+  "UP-N": "metraUPN", "UP-NW": "metraUPNW", "UP-W": "metraUPW",
+  ME: "metraME", RI: "metraRI", SWS: "metraSWS", NCS: "metraNCS", HC: "metraHC",
+};
 
 // ---------- boot ----------
 init();
 async function init() {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").then(r => swReg = r).catch(() => {});
   try { lines = await api("/api/lines"); } catch { lines = []; }
   if (!activeRoute()) showSetup(); else showMain();
 }
@@ -147,19 +156,60 @@ function showMain() {
   document.documentElement.style.setProperty("--line", lineColor(route.line));
   $("#route-picker").innerHTML = S.routes.map(r =>
     `<option value="${r.id}" ${r.id === route.id ? "selected" : ""}>${esc(r.label)}</option>`).join("");
-  $("#route-picker").onchange = e => { S.activeRouteId = e.target.value; persist(); lastSeen.clear(); showMain(); };
+  $("#route-picker").onchange = e => { S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); showMain(); };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup(); };
+  renderSocial(route);
   startPolling();
 }
 
-// Segmented controls: view (live board / today / tomorrow) + direction.
+// X (twitter) service-update feed for the active line — collapsed by default,
+// embed loaded lazily on first expand, always with a plain link fallback.
+function renderSocial(route) {
+  const handle = X_HANDLES[route.line] || "Metra";
+  $("#social").innerHTML = `
+    <details class="social">
+      <summary>&#128226; Service updates — <a href="https://x.com/${handle}" target="_blank" rel="noopener">@${handle}</a> on X</summary>
+      <div class="social-body"><div class="muted small">Tap to load the latest posts…</div></div>
+    </details>`;
+  const det = $("#social details");
+  det.addEventListener("toggle", () => { if (det.open) loadTimeline(det, handle); }, { once: true });
+}
+
+function loadTimeline(det, handle) {
+  const body = det.querySelector(".social-body");
+  const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  body.innerHTML = `
+    <a class="twitter-timeline" data-height="460" data-theme="${dark ? "dark" : "light"}"
+       data-chrome="noheader nofooter transparent"
+       href="https://twitter.com/${handle}?ref_src=twsrc%5Etfw">Posts by @${handle}</a>
+    <p class="muted small social-fallback">Updates not showing? <a href="https://x.com/${handle}" target="_blank" rel="noopener">Open @${handle} on X →</a></p>`;
+  loadWidgets()
+    .then(() => window.twttr && window.twttr.widgets && window.twttr.widgets.load(body))
+    .catch(() => {});
+}
+
+let widgetsPromise = null;
+function loadWidgets() {
+  if (window.twttr && window.twttr.widgets) return Promise.resolve();
+  if (widgetsPromise) return widgetsPromise;
+  widgetsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://platform.twitter.com/widgets.js";
+    s.async = true; s.charset = "utf-8";
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return widgetsPromise;
+}
+
+// Segmented controls: view (live board / full schedule) + direction.
 function renderControls(dir) {
   const r = activeRoute();
-  const view = ttDay || "live";
-  $("#view-tabs").innerHTML = [["live", "Live"], ["today", "Today"], ["tomorrow", "Tomorrow"]]
+  const view = ttDate ? "schedule" : "live";
+  $("#view-tabs").innerHTML = [["live", "Live"], ["schedule", "Schedule"]]
     .map(([v, l]) => `<button data-v="${v}" class="${view === v ? "on" : ""}" role="tab" aria-selected="${view === v}">${l}</button>`).join("");
   $("#view-tabs").querySelectorAll("button").forEach(b =>
-    b.onclick = () => { ttDay = b.dataset.v === "live" ? null : b.dataset.v; refresh(); });
+    b.onclick = () => { ttDate = b.dataset.v === "live" ? null : (ttDate || todayISO()); refresh(); });
 
   const opts = [
     ["BOTH", "&#8646; Both"],
@@ -204,7 +254,7 @@ async function refresh() {
   const dir = resolveDirection(settings(), S.override, new Date(), modified);
   const dirs = dir === "BOTH" ? ["HW", "WH"] : [dir];
   renderControls(dir);
-  if (ttDay) return renderTimetable(dirs);
+  if (ttDate) return renderTimetable(dirs);
 
   let offline = false;
   for (const d of dirs) {
@@ -262,7 +312,7 @@ function render(dirs, offline) {
   $("#rt-status").innerHTML = first ? (first.realtime ? `<span class="live-dot">live</span>` : "scheduled only") : "";
 }
 
-// Full-day scheduled timetable (today or tomorrow) — no realtime merge.
+// Full-day scheduled timetable for any date (incl. weekends) — no realtime merge.
 async function renderTimetable(dirs) {
   const route = activeRoute();
   $("#route-title").innerHTML = dirs.length === 2
@@ -271,13 +321,17 @@ async function renderTimetable(dirs) {
   $("#alerts").innerHTML = "";
   $("#banner").className = "banner hidden";
 
-  let html = "";
+  const chips = quickDays().map(c =>
+    `<button class="chip-day ${c.iso === ttDate ? "on" : ""}" data-iso="${c.iso}">${c.label}</button>`).join("");
+  let html = `<div class="datebar">${chips}
+    <input type="date" id="tt-date" min="${todayISO()}" max="${isoPlus(20)}" value="${ttDate}" aria-label="Pick a date"></div>`;
+
   let note = null;
   for (const d of dirs) {
     const [from, to] = d === "HW" ? [route.home, route.work] : [route.work, route.home];
     html += `<div class="direction-head">${dirTitle(d)}</div>`;
     try {
-      const data = await api(`/api/timetable?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${ttDay}`);
+      const data = await api(`/api/timetable?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${ttDate.replace(/-/g, "")}`);
       note = note || data.serviceNote;
       html += data.trains.length
         ? `<div class="list tt">` + data.trains.map(t => `
@@ -297,8 +351,26 @@ async function renderTimetable(dirs) {
     b.textContent = "Modified schedule (holiday or special service).";
     b.className = "banner";
   }
-  $("#updated").textContent = ttDay === "tomorrow" ? "Tomorrow's full schedule" : "Today's full schedule";
+  $("#content").querySelectorAll(".chip-day").forEach(b => b.onclick = () => { ttDate = b.dataset.iso; refresh(); });
+  $("#tt-date").onchange = e => { if (e.target.value) { ttDate = e.target.value; refresh(); } };
+  $("#updated").textContent = new Date(ttDate + "T00:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
   $("#rt-status").textContent = "scheduled times";
+}
+
+// ---------- date helpers (local time; riders are in Chicago) ----------
+function fmtISO(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function todayISO() { return fmtISO(new Date()); }
+function isoPlus(n) { return fmtISO(addDays(new Date(), n)); }
+function quickDays() {
+  const now = new Date();
+  const nextDow = target => { let x = addDays(now, 1); for (let i = 0; i < 7; i++) { if (x.getDay() === target) return x; x = addDays(x, 1); } return now; };
+  const raw = [
+    { label: "Today", d: now }, { label: "Tomorrow", d: addDays(now, 1) },
+    { label: "Sat", d: nextDow(6) }, { label: "Sun", d: nextDow(0) },
+  ].map(o => ({ label: o.label, iso: fmtISO(o.d) }));
+  const seen = new Set();
+  return raw.filter(o => !seen.has(o.iso) && seen.add(o.iso)); // drop dupes (e.g. tomorrow == Sat)
 }
 
 function dirTitle(d) {
@@ -430,17 +502,30 @@ function updateBadge(next, hasAlert, cancelledNext) {
 }
 
 // ---------- notifications ----------
+// Prefer the service worker's showNotification (renders as a real OS notification
+// and lands in the notification center); fall back to page-context Notification.
+function notify(title, body, tag) {
+  const opts = { body, tag, icon: "icons/icon128.png", badge: "icons/icon32.png", renotify: false };
+  if (swReg && swReg.showNotification) swReg.showNotification(title, opts).catch(() => {});
+  else if ("Notification" in window) try { new Notification(title, opts); } catch { /* ignore */ }
+}
+
 function maybeNotify(d, data) {
   if (!S.notify || !("Notification" in window) || Notification.permission !== "granted") return;
   for (const t of data.trains || []) {
     const key = `${d}:${t.tripId}`;
     const prev = lastSeen.get(key) || { delayMin: 0, cancelled: false };
     if (t.cancelled && !prev.cancelled) {
-      new Notification(`Train ${trainNoShort(t.trainNo)} cancelled`, { body: `${data.from} → ${data.to}, scheduled ${t.depScheduled || t.dep}`, icon: "icons/icon128.png" });
+      notify(`Train ${trainNoShort(t.trainNo)} cancelled`, `${data.from} → ${data.to}, scheduled ${t.depScheduled || t.dep}`, `cancel:${key}`);
     } else if (t.delayMin >= 3 && prev.delayMin < 3) {
-      new Notification(`Train ${trainNoShort(t.trainNo)} delayed ${t.delayMin} min`, { body: `Now departing ${t.dep}`, icon: "icons/icon128.png" });
+      notify(`Train ${trainNoShort(t.trainNo)} delayed ${t.delayMin} min`, `Now departing ${t.dep}`, `delay:${key}`);
     }
     lastSeen.set(key, { delayMin: t.delayMin, cancelled: t.cancelled });
+  }
+  for (const a of data.alerts || []) {
+    if (notifiedAlerts.has(a.id)) continue;
+    notifiedAlerts.add(a.id);
+    notify("Service alert", a.header + (a.description ? ` — ${a.description}` : ""), `alert:${a.id}`);
   }
 }
 

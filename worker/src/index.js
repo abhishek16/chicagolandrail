@@ -8,7 +8,7 @@
 //   - optional Cloudflare rate-limiting rule on the route (real quota control)
 // The Metra API key stays server-side in a Worker secret regardless.
 
-import { kv, json as baseJson, bad, nextScheduled, timetableFor, secToClock } from "./static.js";
+import { kv, json as baseJson, bad, nextScheduled, timetableFor, secToClock, chicagoParts, shiftDate } from "./static.js";
 import { fetchFeed, indexTripUpdates, delayAt, alertsForRoute, positionFor } from "./realtime.js";
 
 function cors(env) {
@@ -62,8 +62,7 @@ export default {
           const from = url.searchParams.get("from");
           const to = url.searchParams.get("to");
           if (!route || !from || !to) throw bad("route, from, to parameters required");
-          const day = url.searchParams.get("date") === "tomorrow" ? 1 : 0;
-          return json(env, await timetableFor(env, route, from, to, day), 200, 300);
+          return json(env, await timetableFor(env, route, from, to, resolveDate(url.searchParams.get("date"))), 200, 300);
         }
         case "/api/next":
           return handleNext(url, env, waitUntil);
@@ -133,6 +132,15 @@ async function handleNext(url, env, waitUntil) {
       .map(s => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lon })),
     trains: merged,
   }, 200, 15);
+}
+
+// Accepts "today", "tomorrow", "YYYYMMDD", or "YYYY-MM-DD"; returns YYYYMMDD.
+function resolveDate(p) {
+  if (!p || p === "today") return chicagoParts().dateStr;
+  if (p === "tomorrow") return shiftDate(chicagoParts().dateStr, 1).dateStr;
+  if (/^\d{8}$/.test(p)) return p;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return p.replace(/-/g, "");
+  return chicagoParts().dateStr;
 }
 
 function clockFromEpoch(ms) {
