@@ -89,6 +89,7 @@ export function tripsBetween(sched, stopsData, from, to, services, dayOffsetSec)
       class: skipped > 8 ? "E" : "L",
       skipped,
       interTotal: interStops.length,
+      stops: t.st.slice(a, b + 1).map(x => ({ id: x[0], depSec: x[2] })), // served stops in this segment
     });
   }
   return out;
@@ -122,6 +123,7 @@ export async function nextScheduled(env, route, from, to, count = 5) {
     class: t.class,
     skipped: t.skipped,
     interTotal: t.interTotal,
+    stops: t.stops.map(s => ({ id: s.id, dep: secToClock(s.depSec) })),
   }));
 
   return {

@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown } from "./logic.js";
+import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown, fmtLive } from "./logic.js";
 import { API_BASE } from "./config.js";
 
 const $ = s => document.querySelector(s);
@@ -18,6 +18,7 @@ let lines = [], stations = [], lastData = {}, lastSeen = new Map(), pollTimer = 
 let ttDate = null;               // null = live board; "YYYY-MM-DD" = schedule for that day
 let swReg = null;                // service-worker registration, for OS notifications
 let notifiedAlerts = new Set();  // alert ids we've already notified about
+let expandedStops = {};          // direction -> whether the hero's stop list is open
 
 // Metra's per-line service-update accounts on X (twitter). Falls back to @Metra.
 const X_HANDLES = {
@@ -115,6 +116,7 @@ function showSetup() {
   const st = settings();
   $("#m0").value = st.morningWindow[0]; $("#m1").value = st.morningWindow[1];
   $("#e0").value = st.eveningWindow[0]; $("#e1").value = st.eveningWindow[1];
+  ["m0", "m1", "e0", "e1"].forEach(id => $("#" + id).onchange = saveWindows); // auto-save, no button
   $("#notif-toggle").checked = !!S.notify;
   $("#notif-note").textContent = ("Notification" in window)
     ? "Get alerts for new delays, cancellations, and service alerts — even when the app is closed. On iPhone, first add this app to your Home Screen from Safari."
@@ -122,7 +124,7 @@ function showSetup() {
 
   renderRouteList();
   $("#save-route").onclick = saveRoute;
-  $("#save-settings").onclick = saveSettings;
+  $("#setup-done").onclick = () => { if (activeRoute()) showMain(); };
   $("#notif-toggle").onchange = async e => {
     if (e.target.checked) {
       if (Notification.permission !== "granted") {
@@ -140,6 +142,7 @@ function showSetup() {
 
 function findStation(name) {
   const n = (name || "").trim().toLowerCase();
+  if (!n) return null; // empty input must not match the first station via .includes("")
   return stations.find(s => s.name.toLowerCase() === n) || stations.find(s => s.name.toLowerCase().includes(n));
 }
 
@@ -158,17 +161,21 @@ function saveRoute() {
     label: $("#label").value.trim() || `${home.name} ↔ ${work.name}`,
   };
   S.routes.push(r);
-  if (!S.activeRouteId) S.activeRouteId = r.id;
+  S.activeRouteId = r.id; // the route you just added becomes the one you view
   persist();
   $("#home").value = $("#work").value = $("#label").value = "";
-  renderRouteList();
   syncPush();
+  showMain(); // straight to the trains for the route you just saved
   return true;
 }
 
-// True if the user has started filling the add-route form.
-function routeFormDirty() {
-  return !!($("#line").value || $("#home").value.trim() || $("#work").value.trim());
+function saveWindows() {
+  S.settings = {
+    ...settings(),
+    morningWindow: [$("#m0").value || "05:00", $("#m1").value || "11:00"],
+    eveningWindow: [$("#e0").value || "12:00", $("#e1").value || "23:59"],
+  };
+  persist();
 }
 
 function renderRouteList() {
@@ -176,45 +183,26 @@ function renderRouteList() {
   const has = S.routes.length;
   $("#route-count").textContent = has ? `(${S.routes.length}/5)` : "";
   el.innerHTML = has ? "" : `<p class="muted small">No routes yet — pick your line and stations below, then tap <b>Save route</b>.</p>`;
-  const done = $("#save-settings");
-  if (done) done.textContent = has ? "Save & view trains" : "Save route & view trains";
+  const done = $("#setup-done");
+  if (done) done.classList.toggle("hidden", !has);
   for (const r of S.routes) {
     const div = document.createElement("div");
     div.className = "route-item" + (r.id === S.activeRouteId ? " active" : "");
-    div.innerHTML = `<div><div class="name">${esc(r.label)}</div>
+    div.innerHTML = `<div class="ri-main"><div class="name">${esc(r.label)}</div>
       <div class="sub">${esc(r.line)} · ${esc(r.homeName)} ↔ ${esc(r.workName)}${r.id === S.activeRouteId ? " · active" : ""}</div></div>
-      <div>${r.id !== S.activeRouteId ? `<button class="ghost" data-a="use">Use</button>` : ""}
-      <button class="ghost danger" data-a="del">Remove</button></div>`;
-    div.querySelectorAll("button").forEach(b => b.onclick = () => {
-      if (b.dataset.a === "use") S.activeRouteId = r.id;
-      else {
-        S.routes = S.routes.filter(x => x.id !== r.id);
-        if (S.activeRouteId === r.id) S.activeRouteId = S.routes[0]?.id || null;
-      }
+      <button class="ghost danger" data-a="del">Remove</button>
+      <span class="ri-go" aria-hidden="true">›</span>`;
+    // Tap the route to view its trains.
+    div.querySelector(".ri-main").onclick = () => { S.activeRouteId = r.id; persist(); showMain(); };
+    div.querySelector(".ri-go").onclick = () => { S.activeRouteId = r.id; persist(); showMain(); };
+    div.querySelector('[data-a="del"]').onclick = e => {
+      e.stopPropagation();
+      S.routes = S.routes.filter(x => x.id !== r.id);
+      if (S.activeRouteId === r.id) S.activeRouteId = S.routes[0]?.id || null;
       persist(); renderRouteList(); syncPush();
-    });
+    };
     el.appendChild(div);
   }
-}
-
-function saveSettings() {
-  // If the form has an unsaved commute, commit it now — so a user who fills the
-  // form and taps "Save & view trains" (without first tapping "Save route")
-  // isn't stuck on a button that appears to do nothing.
-  if (routeFormDirty() && !saveRoute()) return; // saveRoute surfaces its own error
-  S.settings = {
-    ...settings(),
-    morningWindow: [$("#m0").value || "05:00", $("#m1").value || "11:00"],
-    eveningWindow: [$("#e0").value || "12:00", $("#e1").value || "23:59"],
-  };
-  persist();
-  if (activeRoute()) return showMain();
-  // Nothing to show yet — point the user at the one required step.
-  const err = $("#form-error");
-  err.textContent = "Add your commute above (line, home, and work stations) to get started.";
-  err.classList.remove("hidden");
-  $("#line").focus();
-  document.querySelector(".card").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 // ============================================================
@@ -226,7 +214,7 @@ function showMain() {
   document.documentElement.style.setProperty("--line", lineColor(route.line));
   $("#route-picker").innerHTML = S.routes.map(r =>
     `<option value="${r.id}" ${r.id === route.id ? "selected" : ""}>${esc(r.label)}</option>`).join("");
-  $("#route-picker").onchange = e => { S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); showMain(); };
+  $("#route-picker").onchange = e => { S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; showMain(); };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup(); };
   renderSocial(route);
   startPolling();
@@ -374,6 +362,17 @@ function render(dirs, offline) {
 
   $("#content").innerHTML = dirs.map(d => sectionHtml(d)).join("") || `<div class="muted center">No data.</div>`;
 
+  // Tap the hero card to expand/collapse its full stop list.
+  $("#content").querySelectorAll(".hero[data-dir]").forEach(h => {
+    h.onclick = () => {
+      const dd = h.dataset.dir;
+      expandedStops[dd] = !expandedStops[dd];
+      h.classList.toggle("expanded", expandedStops[dd]);
+      const panel = h.querySelector(".stops-panel");
+      if (panel) panel.classList.toggle("open", expandedStops[dd]);
+    };
+  });
+
   const anyAlert = seen.size > 0;
   const cancelledNext = dirs.some(d => lastData[d]?.trains?.[0]?.cancelled);
   updateBadge(bestTrain(dirs), anyAlert, cancelledNext);
@@ -463,7 +462,7 @@ function sectionHtml(d) {
 
   return `${head}
     <div class="section-label">${label}</div>
-    <div class="hero">
+    <div class="hero${expandedStops[d] ? " expanded" : ""}" data-dir="${d}">
       <div class="hero-top">
         <span><span class="chip ${next.class}">${next.class === "E" ? "Express" : "Local"}</span>
         ${next.live ? `<span class="live-dot">live</span>` : ""}</span>
@@ -476,10 +475,11 @@ function sectionHtml(d) {
       <div class="status-row">
         ${next.cancelled
           ? `<span class="cancelled-tag">Cancelled</span>`
-          : `<span class="countdown" data-dep="${next.depEpochMs}">in ${fmtCountdown(next.depEpochMs)}</span>
+          : `<span class="countdown" data-dep="${next.depEpochMs}">departs in ${fmtLive(next.depEpochMs)}</span>
              ${next.delayMin > 0 ? `<span class="delay">+${next.delayMin} min delay</span>` : ""}`}
       </div>
       ${next.cancelled ? "" : journeyBar(data, next, d)}
+      ${next.cancelled ? "" : stopsPanel(data, next, d)}
     </div>
     ${hint ? `<div class="hint">Express Train ${esc(trainNoShort(hint.trainNo))} leaves at ${hint.dep} (in ${hint.minutes} min) — worth waiting?</div>` : ""}
     <div class="list">
@@ -538,6 +538,30 @@ function journeyBar(data, train, d) {
     <div class="lbls"><span>${esc(sts[0].name)}</span><span>${esc(sts[n - 1].name)}</span></div>
     ${mode === "estimated" ? `<div class="est">position estimated from schedule</div>` : ""}
   </div>`;
+}
+
+// Expandable list of every station on the journey; the train's actual stops are
+// highlighted with their scheduled time, skipped stations are dimmed.
+function stopsPanel(data, train, d) {
+  let sts = (data.stations || []).slice();
+  if (!sts.length) return "";
+  const fromId = d === "HW" ? activeRoute().home : activeRoute().work;
+  if (sts[0].id !== fromId) sts.reverse(); // order stations in travel direction
+
+  const times = {};
+  for (const s of train.stops || []) times[s.id] = s.dep;
+  const served = new Set((train.stops || []).map(s => s.id));
+
+  const rows = sts.map(s => {
+    const on = served.has(s.id);
+    return `<div class="stop ${on ? "on" : "off"}">
+      <span class="stop-name">${esc(s.name)}</span>
+      <span class="stop-time">${on ? esc(times[s.id] || "•") : "skips"}</span>
+    </div>`;
+  }).join("");
+
+  return `<div class="stops-toggle">All stops <span class="caret">▾</span></div>
+    <div class="stops-panel${expandedStops[d] ? " open" : ""}"><div class="stops-inner">${rows}</div></div>`;
 }
 
 // ---------- badge (favicon + title) ----------
@@ -603,7 +627,7 @@ function maybeNotify(d, data) {
 function updateCountdowns() {
   document.querySelectorAll("[data-dep]").forEach(el => {
     const dep = Number(el.dataset.dep);
-    el.textContent = el.classList.contains("countdown") ? `in ${fmtCountdown(dep)}` : fmtCountdown(dep);
+    el.textContent = el.classList.contains("countdown") ? `departs in ${fmtLive(dep)}` : fmtCountdown(dep);
   });
 }
 function swapView(name) {

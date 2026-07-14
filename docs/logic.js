@@ -82,3 +82,11 @@ export function fmtCountdown(epochMs) {
   if (s >= 60) return `${Math.floor(s / 60)} min`;
   return `${s}s`;
 }
+
+// Live ticking form (M:SS or H:MM:SS) for the hero card countdown.
+export function fmtLive(epochMs) {
+  const s = Math.max(0, Math.floor((epochMs - Date.now()) / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const pad = n => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
