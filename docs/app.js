@@ -654,21 +654,22 @@ function sectionHtml(d) {
   return `${head}
     <div class="section-label">${label}</div>
     <div class="hero${expandedStops[d] ? " expanded" : ""}" data-dir="${d}">
-      <div class="hero-top">
-        <span><span class="chip ${next.class}">${next.class === "E" ? "Express" : "Local"}</span>
-        ${statusPill(next)}</span>
-        <span class="train-no">Train ${esc(trainNoShort(next.trainNo))}</span>
+      <div class="hero-head">
+        <div class="hero-left">
+          <div class="hero-chips"><span class="chip ${next.class}">${next.class === "E" ? "Express" : "Local"}</span>${statusPill(next)}</div>
+          <div class="times">
+            ${next.delayMin > 0 ? `<span class="was">${next.depScheduled}</span>` : ""}${next.dep}
+            <span class="to">→ ${next.arr}</span>
+          </div>
+          <div class="hero-meta">Train ${esc(trainNoShort(next.trainNo))}${next.cancelled ? "" : `<span class="wx" data-wx="${d}"></span>`}</div>
+        </div>
+        <div class="hero-countdown">
+          ${next.cancelled
+            ? `<div class="cd-min cancel">Cancelled</div>`
+            : `<div class="cd-min" data-dep="${next.depEpochMs}">${cdMinLabel(next.depEpochMs)}</div>
+               <div class="cd-sec" data-dep="${next.depEpochMs}">${fmtLive(next.depEpochMs)}</div>`}
+        </div>
       </div>
-      <div class="times">
-        ${next.delayMin > 0 ? `<span class="was">${next.depScheduled}</span>` : ""}${next.dep}
-        <span class="to">→ ${next.arr}</span>
-      </div>
-      <div class="status-row">
-        ${next.cancelled
-          ? `<span class="cancelled-tag">Cancelled</span>`
-          : `<span class="countdown" data-dep="${next.depEpochMs}">departs in ${fmtLive(next.depEpochMs)}</span>`}
-      </div>
-      ${next.cancelled ? "" : `<div class="wx" data-wx="${d}"></div>`}
       ${next.cancelled ? "" : journeyBar(data, next, d)}
       ${next.cancelled ? "" : stopsPanel(data, next, d)}
     </div>
@@ -792,7 +793,7 @@ async function loadWeather(d) {
     const p = pickPeriod(wx.periods, next.depEpochMs);
     if (p) {
       const tip = `${p.sky}${p.precip ? ` · ${p.precip}% precip` : ""} at departure`;
-      el.innerHTML = `<span class="wx-inner" title="${esc(tip)}">${weatherEmoji(p.sky, p.day)} ${p.temp}°</span>`;
+      el.innerHTML = `<span class="wx-inner" title="${esc(tip)}">· ${weatherEmoji(p.sky, p.day)} ${p.temp}°</span>`;
     }
   } catch { /* weather is a bonus, never block the board */ }
 }
@@ -895,7 +896,9 @@ function maybeNotify(d, data) {
 function updateCountdowns() {
   document.querySelectorAll("[data-dep]").forEach(el => {
     const dep = Number(el.dataset.dep);
-    el.textContent = el.classList.contains("countdown") ? `departs in ${fmtLive(dep)}` : fmtCountdown(dep);
+    if (el.classList.contains("cd-sec")) el.textContent = fmtLive(dep);        // ticking MM:SS
+    else if (el.classList.contains("cd-min")) el.textContent = cdMinLabel(dep); // "in 48 min"
+    else el.textContent = fmtCountdown(dep);                                    // list rows
   });
 }
 function swapView(name) {
@@ -906,3 +909,8 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<":
 // GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
 function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }
 function fmtDur(min) { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h ${m}m` : `${m}m`; }
+// Glanceable minutes for the countdown badge: "in 48 min" / "in 1 min" / "now".
+function cdMinLabel(epochMs) {
+  const m = Math.floor((epochMs - Date.now()) / 60000);
+  return m <= 0 ? "now" : `in ${m} min`;
+}
