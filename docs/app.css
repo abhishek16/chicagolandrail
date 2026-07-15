@@ -147,18 +147,21 @@ main#content { padding: 16px; flex: 1; }
 /* split-flap (Solari) departure-board countdown */
 .flapboard { display: inline-flex; gap: 3px; align-items: stretch; }
 .flap {
-  position: relative; background: #232426; color: #f7f7f7;
+  position: relative; color: #fff;
+  background-image: linear-gradient(180deg,
+    color-mix(in srgb, var(--line) 24%, #2e333b),
+    color-mix(in srgb, var(--line) 15%, #1e222a));
   font-family: var(--board); font-variant-numeric: tabular-nums; font-weight: 700;
   font-size: 22px; line-height: 1; min-width: 22px; padding: 9px 5px;
-  border-radius: 4px; text-align: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+  border-radius: 6px; text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16); text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
 }
 .flap::after {
   content: ""; position: absolute; left: 3px; right: 3px; top: 50%; height: 1px;
-  background: rgba(0, 0, 0, 0.6); transform: translateY(-0.5px);
+  background: rgba(0, 0, 0, 0.4); transform: translateY(-0.5px);
 }
 .flap.colon {
-  background: transparent; box-shadow: none; text-shadow: none;
+  background-image: none; box-shadow: none; text-shadow: none;
   color: var(--muted); min-width: auto; padding: 9px 1px;
 }
 .flap.colon::after { display: none; }
