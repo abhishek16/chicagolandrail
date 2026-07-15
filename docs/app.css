@@ -142,16 +142,26 @@ main#content { padding: 16px; flex: 1; }
 .hero-left { flex: 1; min-width: 0; }
 .hero-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .hero-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
-.hero-countdown {
-  flex-shrink: 0; text-align: center;
-  background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 9px 14px;
+.hero-countdown { flex-shrink: 0; }
+.cd-cancel { color: var(--red); font-weight: 700; font-size: 14px; padding-top: 6px; }
+/* split-flap (Solari) departure-board countdown */
+.flapboard { display: inline-flex; gap: 3px; align-items: stretch; }
+.flap {
+  position: relative; background: #232426; color: #f7f7f7;
+  font-family: var(--board); font-variant-numeric: tabular-nums; font-weight: 700;
+  font-size: 22px; line-height: 1; min-width: 22px; padding: 9px 5px;
+  border-radius: 4px; text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
 }
-.cd-min {
-  font-family: var(--board); font-variant-numeric: tabular-nums;
-  font-size: 20px; font-weight: 700; color: var(--line); white-space: nowrap; line-height: 1.1;
+.flap::after {
+  content: ""; position: absolute; left: 3px; right: 3px; top: 50%; height: 1px;
+  background: rgba(0, 0, 0, 0.6); transform: translateY(-0.5px);
 }
-.cd-min.cancel { color: var(--red); font-family: inherit; }
-.cd-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.flap.colon {
+  background: transparent; box-shadow: none; text-shadow: none;
+  color: var(--muted); min-width: auto; padding: 9px 1px;
+}
+.flap.colon::after { display: none; }
 .times {
   font-family: var(--board); font-variant-numeric: tabular-nums;
   font-size: 25px; font-weight: 600; margin: 8px 0 0;

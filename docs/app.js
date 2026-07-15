@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown } from "./logic.js";
+import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown, fmtLive } from "./logic.js";
 import { API_BASE } from "./config.js";
 
 const $ = s => document.querySelector(s);
@@ -665,9 +665,8 @@ function sectionHtml(d) {
         </div>
         <div class="hero-countdown">
           ${next.cancelled
-            ? `<div class="cd-min cancel">Cancelled</div>`
-            : `<div class="cd-min" data-dep="${next.depEpochMs}">${fmtCountdown(next.depEpochMs)}</div>
-               <div class="cd-label">until departure</div>`}
+            ? `<div class="cd-cancel">Cancelled</div>`
+            : `<div class="flapboard" data-dep="${next.depEpochMs}">${flapTiles(next.depEpochMs)}</div>`}
         </div>
       </div>
       ${next.cancelled ? "" : journeyBar(data, next, d)}
@@ -895,7 +894,9 @@ function maybeNotify(d, data) {
 // ---------- misc ----------
 function updateCountdowns() {
   document.querySelectorAll("[data-dep]").forEach(el => {
-    el.textContent = fmtCountdown(Number(el.dataset.dep)); // "36 min", or "45s" when close
+    const dep = Number(el.dataset.dep);
+    if (el.classList.contains("flapboard")) el.innerHTML = flapTiles(dep); // ticking flip-board
+    else el.textContent = fmtCountdown(dep);                               // list rows
   });
 }
 function swapView(name) {
@@ -906,3 +907,8 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<":
 // GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
 function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }
 function fmtDur(min) { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h ${m}m` : `${m}m`; }
+// Live countdown as split-flap departure-board tiles (one card per character).
+function flapTiles(epochMs) {
+  return fmtLive(epochMs).split("").map(ch =>
+    ch === ":" ? `<span class="flap colon">:</span>` : `<span class="flap">${ch}</span>`).join("");
+}
