@@ -11,6 +11,7 @@
 import { kv, json as baseJson, bad, nextScheduled, timetableFor, secToClock, chicagoParts, shiftDate } from "./static.js";
 import { fetchFeed, indexTripUpdates, delayAt, alertsForRoute, positionFor } from "./realtime.js";
 import { runPushCycle } from "./poller.js";
+import { weatherFor } from "./weather.js";
 
 function cors(env) {
   const origin = env.ALLOWED_ORIGIN || "*";
@@ -71,6 +72,19 @@ export default {
           const to = url.searchParams.get("to");
           if (!route || !from || !to) throw bad("route, from, to parameters required");
           return json(env, await timetableFor(env, route, from, to, resolveDate(url.searchParams.get("date"))), 200, 300);
+        }
+        case "/api/weather": {
+          const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw bad("lat, lon required");
+          // Edge-cache 30 min per rounded coordinate → ~1 upstream call/station/30min.
+          const ck = new Request(`https://wx-cache.internal/${lat.toFixed(3)},${lon.toFixed(3)}`);
+          const hit = await caches.default.match(ck);
+          if (hit) return json(env, await hit.json(), 200, 1800);
+          const data = await weatherFor(lat.toFixed(4), lon.toFixed(4), env.VAPID_SUBJECT);
+          waitUntil(caches.default.put(ck, new Response(JSON.stringify(data), {
+            headers: { "Cache-Control": "public, max-age=1800", "Content-Type": "application/json" },
+          })));
+          return json(env, data, 200, 1800);
         }
         case "/api/next":
           return handleNext(url, env, waitUntil);

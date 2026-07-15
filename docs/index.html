@@ -72,6 +72,24 @@
         </section>
 
         <section>
+          <h2>One-off trip</h2>
+          <p class="muted small">See any two stations (a game, a visit) without saving a route.</p>
+          <div class="card">
+            <label>Line <select id="oo-line"><option value="">Choose a line…</option></select></label>
+            <label>From
+              <input id="oo-from" list="oo-from-list" placeholder="Type to search…" autocomplete="off">
+              <datalist id="oo-from-list"></datalist>
+            </label>
+            <label>To
+              <input id="oo-to" list="oo-to-list" placeholder="Type to search…" autocomplete="off">
+              <datalist id="oo-to-list"></datalist>
+            </label>
+            <button id="oo-go" class="primary">View trip</button>
+            <p id="oo-error" class="error hidden"></p>
+          </div>
+        </section>
+
+        <section>
           <h2>Direction windows</h2>
           <div class="grid2">
             <label>Morning starts <input id="m0" type="time"></label>

@@ -19,6 +19,31 @@ let ttDate = null;               // null = live board; "YYYY-MM-DD" = schedule f
 let swReg = null;                // service-worker registration, for OS notifications
 let notifiedAlerts = new Set();  // alert ids we've already notified about
 let expandedStops = {};          // direction -> whether the hero's stop list is open
+let meta = null;                 // /api/meta freshness, for the stale-data warning
+let weatherCache = new Map();    // stationId -> { periods, at }
+let oneOff = null;               // transient one-off trip (not saved), overrides active route
+let ooStations = [];             // stations for the one-off line picker
+
+// ---------- persistent offline cache (survives reload/underground) ----------
+const cacheKey = id => "mct_cache_" + id;
+function saveCache() {
+  const r = activeRoute(); if (!r) return;
+  try { localStorage.setItem(cacheKey(r.id), JSON.stringify({ data: lastData, savedAt: Date.now() })); } catch { /* quota */ }
+}
+function loadCache() {
+  const r = activeRoute();
+  lastData = {};
+  if (!r) return;
+  try {
+    const c = JSON.parse(localStorage.getItem(cacheKey(r.id)) || "null");
+    if (c && c.data) lastData = c.data;
+  } catch { /* corrupt */ }
+}
+// Whole days since the GTFS static feed was last ingested (null if unknown).
+function metaStaleDays() {
+  if (!meta || !meta.ingestedAt) return null;
+  return Math.floor((Date.now() - new Date(meta.ingestedAt).getTime()) / 86400000);
+}
 
 // Metra's per-line service-update accounts on X (twitter). Falls back to @Metra.
 const X_HANDLES = {
@@ -32,17 +57,26 @@ init();
 async function init() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").then(r => swReg = r).catch(() => {});
   try { lines = await api("/api/lines"); } catch { lines = []; }
+  api("/api/meta").then(m => { meta = m; }).catch(() => {}); // for stale-data warning
   if (!activeRoute()) showSetup(); else showMain();
   syncPush(); // refresh push subscription + line list on load
 }
 
-function activeRoute() { return S.routes.find(r => r.id === S.activeRouteId) || S.routes[0] || null; }
+function activeRoute() { return oneOff || S.routes.find(r => r.id === S.activeRouteId) || S.routes[0] || null; }
 function settings() { return S.settings || DEFAULT_SETTINGS; }
 
-async function api(path) {
-  const res = await fetch(API_BASE + path);
-  if (!res.ok) throw new Error(`${path} → ${res.status}`);
-  return res.json();
+// One quick retry with backoff smooths over cell-network blips on the train.
+async function api(path, retries = 1) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(API_BASE + path);
+      if (!res.ok) throw new Error(`${path} → ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      if (attempt >= retries) throw e;
+      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
 }
 
 async function apiPost(path, body) {
@@ -122,6 +156,31 @@ function showSetup() {
     ? "Get alerts for new delays, cancellations, and service alerts — even when the app is closed. On iPhone, first add this app to your Home Screen from Safari."
     : "This browser doesn't support notifications.";
 
+  // One-off trip picker (transient, not saved).
+  const ooSel = $("#oo-line");
+  ooSel.innerHTML = `<option value="">Choose a line…</option>` +
+    lines.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
+  ooSel.onchange = async () => {
+    ooStations = []; $("#oo-from-list").innerHTML = $("#oo-to-list").innerHTML = "";
+    if (!ooSel.value) return;
+    try { ooStations = (await api(`/api/stops?route=${encodeURIComponent(ooSel.value)}`)).stations; } catch { ooStations = []; }
+    const opts = ooStations.map(s => `<option value="${esc(s.name)}">`).join("");
+    $("#oo-from-list").innerHTML = opts; $("#oo-to-list").innerHTML = opts;
+  };
+  $("#oo-go").onclick = () => {
+    const err = $("#oo-error"); err.classList.add("hidden");
+    const fail = m => { err.textContent = m; err.classList.remove("hidden"); };
+    const find = name => {
+      const n = (name || "").trim().toLowerCase(); if (!n) return null;
+      return ooStations.find(s => s.name.toLowerCase() === n) || ooStations.find(s => s.name.toLowerCase().includes(n));
+    };
+    const line = ooSel.value, from = find($("#oo-from").value), to = find($("#oo-to").value);
+    if (!line || !from || !to) return fail("Pick a line and valid from & to stations.");
+    if (from.id === to.id) return fail("From and to must be different.");
+    oneOff = { id: "__oneoff", line, home: from.id, homeName: from.name, work: to.id, workName: to.name, label: `${from.name} → ${to.name}` };
+    showMain();
+  };
+
   renderRouteList();
   $("#save-route").onclick = saveRoute;
   $("#setup-done").onclick = () => { if (activeRoute()) showMain(); };
@@ -193,8 +252,8 @@ function renderRouteList() {
       <button class="ghost danger" data-a="del">Remove</button>
       <span class="ri-go" aria-hidden="true">›</span>`;
     // Tap the route to view its trains.
-    div.querySelector(".ri-main").onclick = () => { S.activeRouteId = r.id; persist(); showMain(); };
-    div.querySelector(".ri-go").onclick = () => { S.activeRouteId = r.id; persist(); showMain(); };
+    div.querySelector(".ri-main").onclick = () => { oneOff = null; S.activeRouteId = r.id; persist(); showMain(); };
+    div.querySelector(".ri-go").onclick = () => { oneOff = null; S.activeRouteId = r.id; persist(); showMain(); };
     div.querySelector('[data-a="del"]').onclick = e => {
       e.stopPropagation();
       S.routes = S.routes.filter(x => x.id !== r.id);
@@ -212,11 +271,17 @@ function showMain() {
   swapView("main");
   const route = activeRoute();
   document.documentElement.style.setProperty("--line", lineColor(route.line));
-  $("#route-picker").innerHTML = S.routes.map(r =>
-    `<option value="${r.id}" ${r.id === route.id ? "selected" : ""}>${esc(r.label)}</option>`).join("");
-  $("#route-picker").onchange = e => { S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; showMain(); };
+  $("#route-picker").innerHTML =
+    (oneOff ? `<option value="__oneoff" selected>One-off: ${esc(oneOff.label)}</option>` : "") +
+    S.routes.map(r => `<option value="${r.id}" ${!oneOff && r.id === route.id ? "selected" : ""}>${esc(r.label)}</option>`).join("");
+  $("#route-picker").onchange = e => {
+    if (e.target.value === "__oneoff") return;
+    oneOff = null;
+    S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; showMain();
+  };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup(); };
   renderSocial(route);
+  loadCache(); // hydrate last-good board so an offline open shows something
   startPolling();
 }
 
@@ -327,6 +392,7 @@ async function refresh() {
     }
   }
 
+  if (!offline) saveCache(); // persist last-good board for offline opens
   render(dirs, offline);
 }
 
@@ -348,10 +414,14 @@ function render(dirs, offline) {
 
   // banner
   const b = $("#banner");
+  const staleDays = metaStaleDays();
   if (offline) {
     const t = first ? new Date(first.fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
     b.textContent = t ? `Offline — showing data from ${t}.` : "Offline — no cached data yet.";
     b.className = "banner offline";
+  } else if (staleDays != null && staleDays >= 2) {
+    b.textContent = `Schedule data is ${staleDays} days old — times may be outdated.`;
+    b.className = "banner";
   } else if (first && first.serviceNote) {
     b.textContent = "Modified schedule in effect today (holiday or special service).";
     b.className = "banner";
@@ -372,6 +442,8 @@ function render(dirs, offline) {
       if (panel) panel.classList.toggle("open", expandedStops[dd]);
     };
   });
+
+  dirs.forEach(loadWeather); // fill the weather line under each hero (async, optional)
 
   const anyAlert = seen.size > 0;
   const cancelledNext = dirs.some(d => lastData[d]?.trains?.[0]?.cancelled);
@@ -480,6 +552,7 @@ function sectionHtml(d) {
           ? `<span class="cancelled-tag">Cancelled</span>`
           : `<span class="countdown" data-dep="${next.depEpochMs}">departs in ${fmtLive(next.depEpochMs)}</span>`}
       </div>
+      ${next.cancelled ? "" : `<div class="wx" data-wx="${d}"></div>`}
       ${next.cancelled ? "" : journeyBar(data, next, d)}
       ${next.cancelled ? "" : stopsPanel(data, next, d)}
     </div>
@@ -583,6 +656,33 @@ function stopsPanel(data, train, d) {
 
   return `<div class="stops-toggle">All stops <span class="caret">▾</span></div>
     <div class="stops-panel${expandedStops[d] ? " open" : ""}"><div class="stops-inner">${rows}</div></div>`;
+}
+
+// ---------- weather at departure ----------
+async function loadWeather(d) {
+  const data = lastData[d];
+  const next = data && data.trains && data.trains.find(t => !t.cancelled && t.depEpochMs > Date.now());
+  const el = document.querySelector(`.wx[data-wx="${d}"]`);
+  if (!next || !el) return;
+  const fromId = d === "HW" ? activeRoute().home : activeRoute().work;
+  const st = (data.stations || []).find(s => s.id === fromId);
+  if (!st || st.lat == null) return;
+  try {
+    let wx = weatherCache.get(st.id);
+    if (!wx || Date.now() - wx.at > 20 * 60 * 1000) {
+      wx = { ...(await api(`/api/weather?lat=${st.lat}&lon=${st.lon}`)), at: Date.now() };
+      weatherCache.set(st.id, wx);
+    }
+    const p = pickPeriod(wx.periods, next.depEpochMs);
+    if (p) el.innerHTML = `<span class="wx-inner">${p.temp}°${p.unit} · ${esc(p.sky)}${p.precip ? ` · ${p.precip}%` : ""} at departure</span>`;
+  } catch { /* weather is a bonus, never block the board */ }
+}
+function pickPeriod(periods, epochMs) {
+  for (const p of periods || []) {
+    const start = new Date(p.t).getTime();
+    if (start <= epochMs && epochMs < start + 3600000) return p;
+  }
+  return (periods && periods[0]) || null;
 }
 
 // ---------- badge (favicon + title) ----------
