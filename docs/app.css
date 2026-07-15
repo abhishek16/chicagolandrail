@@ -145,27 +145,33 @@ main#content { padding: 16px; flex: 1; }
 .hero-countdown { flex-shrink: 0; }
 .cd-cancel { color: var(--red); font-weight: 700; font-size: 14px; padding-top: 6px; }
 /* split-flap (Solari) departure-board countdown */
-.flapboard { display: inline-flex; gap: 4px; align-items: center; }
+.flapboard { display: inline-flex; gap: 5px; align-items: center; }
 .flip-colon {
-  font-family: var(--board); font-weight: 700; font-size: 22px; color: var(--muted); padding: 0 1px;
+  font-family: var(--board); font-weight: 700; font-size: 24px; color: #9aa0a8; padding: 0 1px;
 }
 .flip-card {
-  position: relative; width: 25px; height: 40px; border-radius: 6px;
-  background: #16181c; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.22);
-  perspective: 160px; /* gives the flip its 3D depth */
+  position: relative; width: 27px; height: 44px; border-radius: 7px;
+  background: #2b2f36; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  perspective: 200px; /* gives the flip its 3D depth */
+}
+/* soft hairline seam — hints at the split-flap without slashing the digit */
+.flip-card::after {
+  content: ""; position: absolute; left: 3px; right: 3px; top: 50%;
+  height: 1px; margin-top: -0.5px; background: rgba(0, 0, 0, 0.28);
+  z-index: 4; pointer-events: none;
 }
 .flip-card > div {
-  position: absolute; left: 0; width: 100%; height: 19px; overflow: hidden;
-  background-image: linear-gradient(180deg, #3a3f47, #2b2f37);
+  position: absolute; left: 0; width: 100%; height: 22px; overflow: hidden;
+  background-image: linear-gradient(180deg, #3f444d, #33373f);
 }
 .flip-card > div span {
   display: block; width: 100%; text-align: center;
-  font: 700 26px/40px var(--board); font-variant-numeric: tabular-nums;
-  color: #f3f1ea; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+  font: 800 30px/44px var(--board); font-variant-numeric: tabular-nums;
+  color: #f8f6f0; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
-.flip-card .top, .flip-card .flip-top { top: 0; border-radius: 6px 6px 0 0; }
-.flip-card .bottom, .flip-card .flip-bottom { bottom: 0; border-radius: 0 0 6px 6px; background-image: linear-gradient(180deg, #333840, #24272e); }
-.flip-card .bottom span, .flip-card .flip-bottom span { transform: translateY(-21px); }
+.flip-card .top, .flip-card .flip-top { top: 0; border-radius: 7px 7px 0 0; }
+.flip-card .bottom, .flip-card .flip-bottom { bottom: 0; border-radius: 0 0 7px 7px; background-image: linear-gradient(180deg, #2e323a, #23262d); }
+.flip-card .bottom span, .flip-card .flip-bottom span { transform: translateY(-22px); }
 .flip-card .flip-top { transform-origin: bottom center; backface-visibility: hidden; z-index: 3; }
 .flip-card .flip-bottom { transform-origin: top center; backface-visibility: hidden; z-index: 3; transform: rotateX(90deg); }
 .flip-card .flip-top, .flip-card .flip-bottom { display: none; }
