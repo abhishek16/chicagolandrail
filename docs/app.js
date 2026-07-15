@@ -202,50 +202,61 @@ function showSetup() {
       await unsubscribePush();
     }
   };
-  setupReminders();
-  setupBriefing();
+  try { setupReminders(); } catch (e) { console.error("reminders setup failed", e); }
+  try { setupBriefing(); } catch (e) { console.error("briefing setup failed", e); }
 }
 
 // ---------- departure reminders (setup UI) ----------
 function setupReminders() {
   const routeSel = $("#rem-route");
-  routeSel.innerHTML = S.routes.length
+  const hasRoutes = S.routes.length > 0;
+  routeSel.innerHTML = hasRoutes
     ? S.routes.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join("")
-    : `<option value="">Save a route first</option>`;
+    : `<option value="">— save a route first —</option>`;
+  let remTrains = []; // trains currently in the dropdown, looked up by value on add
 
   const loadTrains = async () => {
     const trainSel = $("#rem-train");
+    remTrains = [];
     const r = S.routes.find(x => x.id === routeSel.value);
     if (!r) { trainSel.innerHTML = `<option value="">—</option>`; return; }
     const [from, to] = $("#rem-dir").value === "HW" ? [r.home, r.work] : [r.work, r.home];
     trainSel.innerHTML = `<option value="">Loading…</option>`;
     try {
       const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=today`);
-      trainSel.innerHTML = data.trains.map(t =>
-        `<option value="${t.depSec}" data-no="${esc(trainNoShort(t.trainNo))}" data-label="${esc(t.dep)}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
-        || `<option value="">No trains that day</option>`;
-    } catch { trainSel.innerHTML = `<option value="">Couldn't load trains</option>`; }
+      remTrains = (data.trains || []).filter(t => t.depSec != null);
+      trainSel.innerHTML = remTrains.length
+        ? remTrains.map(t => `<option value="${t.depSec}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
+        : `<option value="">No trains found for this route</option>`;
+    } catch { trainSel.innerHTML = `<option value="">Couldn't load trains — check connection</option>`; }
   };
   routeSel.onchange = loadTrains;
   $("#rem-dir").onchange = loadTrains;
-  if (S.routes.length) loadTrains();
+  if (hasRoutes) loadTrains();
 
   $("#rem-add").onclick = () => {
-    const err = $("#rem-error"); err.classList.add("hidden");
+    const err = $("#rem-error");
+    const show = m => { err.textContent = m; err.classList.remove("hidden"); };
+    err.classList.add("hidden");
     const r = S.routes.find(x => x.id === routeSel.value);
-    const opt = $("#rem-train").selectedOptions[0];
-    if (!r || !opt || !opt.value) { err.textContent = "Pick a route and a train."; err.classList.remove("hidden"); return; }
+    if (!r) return show("Save a route above first, then set a reminder for it.");
+    const trainSel = $("#rem-train");
+    const depSec = Number(trainSel.value);          // read .value directly (reliable on iOS)
+    const t = remTrains.find(x => Number(x.depSec) === depSec);
+    if (!trainSel.value || !t) return show(remTrains.length ? "Choose a train from the list." : "Train list is still loading — try again in a moment.");
     const [from, to, fromName, toName] = $("#rem-dir").value === "HW"
       ? [r.home, r.work, r.homeName, r.workName]
       : [r.work, r.home, r.workName, r.homeName];
-    (S.reminders ||= []).push({
+    S.reminders = S.reminders || [];
+    S.reminders.push({
       id: "rem" + Date.now(), routeId: r.id, line: r.line,
       from, to, fromName, toName,
-      depSec: Number(opt.value), trainNo: opt.dataset.no, depLabel: opt.dataset.label,
+      depSec, trainNo: trainNoShort(t.trainNo), depLabel: t.dep,
       lead: Number($("#rem-lead").value),
       days: $("#rem-days").value === "all" ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5],
     });
     persist(); renderReminderList(); syncPush();
+    if (!S.notify) show("Reminder saved — turn on Notifications above to actually receive it.");
   };
   renderReminderList();
 }
@@ -267,17 +278,19 @@ function renderReminderList() {
 // ---------- morning briefing (setup UI) ----------
 function setupBriefing() {
   const routeSel = $("#brief-route");
-  routeSel.innerHTML = S.routes.length
+  const hasRoutes = S.routes.length > 0;
+  routeSel.innerHTML = hasRoutes
     ? S.routes.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join("")
-    : `<option value="">Save a route first</option>`;
+    : `<option value="">— save a route first —</option>`;
   const b = S.briefing;
   $("#brief-toggle").checked = !!(b && b.enabled);
   if (b) { $("#brief-time").value = b.time || "06:45"; if (b.routeId) routeSel.value = b.routeId; }
+  const note = m => { const el = $("#brief-note"); if (el) el.textContent = m; };
 
   const save = () => {
     const enabled = $("#brief-toggle").checked;
+    if (enabled && !hasRoutes) { $("#brief-toggle").checked = false; note("Save a route above first to get a briefing."); return; }
     const r = S.routes.find(x => x.id === routeSel.value) || S.routes[0];
-    if (enabled && !r) { $("#brief-toggle").checked = false; return; }
     const time = $("#brief-time").value || "06:45";
     const [h, m] = time.split(":").map(Number);
     S.briefing = enabled && r
@@ -285,10 +298,19 @@ function setupBriefing() {
           from: r.home, to: r.work, fromName: r.homeName, toName: r.workName, days: [1, 2, 3, 4, 5] }
       : null;
     persist(); syncPush();
+    note(enabled && r
+      ? `On — ${fmtTime12(time)} on weekdays, ${r.label}.${S.notify ? "" : " Turn on Notifications above to receive it."}`
+      : "Off.");
   };
   $("#brief-toggle").onchange = save;
   $("#brief-time").onchange = save;
   routeSel.onchange = save;
+  note(b && b.enabled ? `On — ${fmtTime12(b.time || "06:45")} on weekdays.` : "Off.");
+}
+
+function fmtTime12(hhmm) {
+  const [h, m] = String(hhmm).split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
 function findStation(name) {
