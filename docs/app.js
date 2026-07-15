@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown, fmtLive } from "./logic.js";
+import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown } from "./logic.js";
 import { API_BASE } from "./config.js";
 
 const $ = s => document.querySelector(s);
@@ -666,8 +666,8 @@ function sectionHtml(d) {
         <div class="hero-countdown">
           ${next.cancelled
             ? `<div class="cd-min cancel">Cancelled</div>`
-            : `<div class="cd-min" data-dep="${next.depEpochMs}">${cdMinLabel(next.depEpochMs)}</div>
-               <div class="cd-sec" data-dep="${next.depEpochMs}">${fmtLive(next.depEpochMs)}</div>`}
+            : `<div class="cd-min" data-dep="${next.depEpochMs}">${fmtCountdown(next.depEpochMs)}</div>
+               <div class="cd-label">until departure</div>`}
         </div>
       </div>
       ${next.cancelled ? "" : journeyBar(data, next, d)}
@@ -895,10 +895,7 @@ function maybeNotify(d, data) {
 // ---------- misc ----------
 function updateCountdowns() {
   document.querySelectorAll("[data-dep]").forEach(el => {
-    const dep = Number(el.dataset.dep);
-    if (el.classList.contains("cd-sec")) el.textContent = fmtLive(dep);        // ticking MM:SS
-    else if (el.classList.contains("cd-min")) el.textContent = cdMinLabel(dep); // "in 48 min"
-    else el.textContent = fmtCountdown(dep);                                    // list rows
+    el.textContent = fmtCountdown(Number(el.dataset.dep)); // "36 min", or "45s" when close
   });
 }
 function swapView(name) {
@@ -909,8 +906,3 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<":
 // GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
 function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }
 function fmtDur(min) { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h ${m}m` : `${m}m`; }
-// Glanceable minutes for the countdown badge: "in 48 min" / "in 1 min" / "now".
-function cdMinLabel(epochMs) {
-  const m = Math.floor((epochMs - Date.now()) / 60000);
-  return m <= 0 ? "now" : `in ${m} min`;
-}
