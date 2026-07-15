@@ -179,8 +179,9 @@ main#content { padding: 16px; flex: 1; }
 
 .wx { margin-top: 10px; }
 .wx-inner {
-  display: inline-flex; align-items: center; font-size: 12px; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text);
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
+  cursor: help; font-variant-numeric: tabular-nums;
 }
 
 /* ---- journey bar ---- */

@@ -19,6 +19,7 @@ export async function weatherFor(lat, lon, contact) {
     unit: p.temperatureUnit,
     sky: p.shortForecast,
     precip: p.probabilityOfPrecipitation?.value ?? null,
+    day: p.isDaytime,
   }));
   return { periods };
 }

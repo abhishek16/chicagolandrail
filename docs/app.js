@@ -766,8 +766,26 @@ async function loadWeather(d) {
       weatherCache.set(st.id, wx);
     }
     const p = pickPeriod(wx.periods, next.depEpochMs);
-    if (p) el.innerHTML = `<span class="wx-inner">${p.temp}°${p.unit} · ${esc(p.sky)}${p.precip ? ` · ${p.precip}%` : ""} at departure</span>`;
+    if (p) {
+      const tip = `${p.sky}${p.precip ? ` · ${p.precip}% precip` : ""} at departure`;
+      el.innerHTML = `<span class="wx-inner" title="${esc(tip)}">${weatherEmoji(p.sky, p.day)} ${p.temp}°</span>`;
+    }
   } catch { /* weather is a bonus, never block the board */ }
+}
+// Map an NWS shortForecast to an emoji (day/night aware).
+function weatherEmoji(sky, day) {
+  const s = (sky || "").toLowerCase();
+  if (/thunder|tstorm/.test(s)) return "⛈️";
+  if (/snow|flurr|sleet|wintry|ice|blizzard/.test(s)) return "🌨️";
+  if (/rain|shower|drizzle/.test(s)) return "🌧️";
+  if (/fog|mist|haze|smoke/.test(s)) return "🌫️";
+  if (/wind|breez/.test(s)) return "💨";
+  if (/mostly (clear|sunny)/.test(s)) return day === false ? "🌙" : "🌤️";
+  if (/partly (cloudy|sunny)|partly clear/.test(s)) return day === false ? "☁️" : "⛅";
+  if (/mostly cloudy|overcast/.test(s)) return "🌥️";
+  if (/cloud/.test(s)) return "☁️";
+  if (/clear|sunny|fair/.test(s)) return day === false ? "🌙" : "☀️";
+  return "🌡️";
 }
 function pickPeriod(periods, epochMs) {
   for (const p of periods || []) {
