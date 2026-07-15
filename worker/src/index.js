@@ -108,10 +108,16 @@ async function sha256hex(s) {
 }
 
 async function pushSubscribe(request, env) {
-  const { subscription, lines } = await request.json();
+  const { subscription, lines, reminders, briefing } = await request.json();
   if (!subscription || !subscription.endpoint) throw bad("subscription with endpoint required");
   const key = "sub:" + await sha256hex(subscription.endpoint);
-  await env.GTFS.put(key, JSON.stringify({ subscription, lines: Array.isArray(lines) ? lines : [], updatedAt: Date.now() }));
+  // Preserve lastFired markers so a re-subscribe doesn't re-fire today's reminders.
+  const prior = await env.GTFS.get(key, "json");
+  const priorFired = {};
+  for (const r of prior?.reminders || []) if (r.id) priorFired[r.id] = r.lastFired;
+  const rems = (Array.isArray(reminders) ? reminders : []).map(r => ({ ...r, lastFired: priorFired[r.id] || r.lastFired || null }));
+  const brief = briefing ? { ...briefing, lastFired: prior?.briefing?.lastFired || null } : null;
+  await env.GTFS.put(key, JSON.stringify({ subscription, lines: Array.isArray(lines) ? lines : [], reminders: rems, briefing: brief, updatedAt: Date.now() }));
   return json(env, { ok: true });
 }
 

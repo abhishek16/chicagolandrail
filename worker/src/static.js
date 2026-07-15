@@ -149,6 +149,7 @@ export async function timetableFor(env, route, from, to, dateStr = null) {
       trainNo: t.trainNo,
       dep: secToClock(t.depSec),
       arr: secToClock(t.arrSec),
+      depSec: t.depSec,
       durMin: Math.max(0, Math.round((t.arrSec - t.depSec) / 60)),
       class: t.class,
       skipped: t.skipped,

@@ -11,7 +11,7 @@ const store = {
   },
   save(s) { localStorage.setItem("mct", JSON.stringify(s)); },
 };
-let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false }, store.load());
+let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null }, store.load());
 const persist = () => store.save(S);
 
 let lines = [], stations = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
@@ -105,7 +105,12 @@ async function subscribePush() {
     if (!key) return;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(key) });
-    await apiPost("/api/push/subscribe", { subscription: sub.toJSON(), lines: [...new Set(S.routes.map(r => r.line))] });
+    await apiPost("/api/push/subscribe", {
+      subscription: sub.toJSON(),
+      lines: [...new Set(S.routes.map(r => r.line))],
+      reminders: S.reminders || [],
+      briefing: S.briefing || null,
+    });
   } catch { /* push unsupported/blocked — in-page notifications still work */ }
 }
 
@@ -197,6 +202,93 @@ function showSetup() {
       await unsubscribePush();
     }
   };
+  setupReminders();
+  setupBriefing();
+}
+
+// ---------- departure reminders (setup UI) ----------
+function setupReminders() {
+  const routeSel = $("#rem-route");
+  routeSel.innerHTML = S.routes.length
+    ? S.routes.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join("")
+    : `<option value="">Save a route first</option>`;
+
+  const loadTrains = async () => {
+    const trainSel = $("#rem-train");
+    const r = S.routes.find(x => x.id === routeSel.value);
+    if (!r) { trainSel.innerHTML = `<option value="">—</option>`; return; }
+    const [from, to] = $("#rem-dir").value === "HW" ? [r.home, r.work] : [r.work, r.home];
+    trainSel.innerHTML = `<option value="">Loading…</option>`;
+    try {
+      const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=today`);
+      trainSel.innerHTML = data.trains.map(t =>
+        `<option value="${t.depSec}" data-no="${esc(trainNoShort(t.trainNo))}" data-label="${esc(t.dep)}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
+        || `<option value="">No trains that day</option>`;
+    } catch { trainSel.innerHTML = `<option value="">Couldn't load trains</option>`; }
+  };
+  routeSel.onchange = loadTrains;
+  $("#rem-dir").onchange = loadTrains;
+  if (S.routes.length) loadTrains();
+
+  $("#rem-add").onclick = () => {
+    const err = $("#rem-error"); err.classList.add("hidden");
+    const r = S.routes.find(x => x.id === routeSel.value);
+    const opt = $("#rem-train").selectedOptions[0];
+    if (!r || !opt || !opt.value) { err.textContent = "Pick a route and a train."; err.classList.remove("hidden"); return; }
+    const [from, to, fromName, toName] = $("#rem-dir").value === "HW"
+      ? [r.home, r.work, r.homeName, r.workName]
+      : [r.work, r.home, r.workName, r.homeName];
+    (S.reminders ||= []).push({
+      id: "rem" + Date.now(), routeId: r.id, line: r.line,
+      from, to, fromName, toName,
+      depSec: Number(opt.value), trainNo: opt.dataset.no, depLabel: opt.dataset.label,
+      lead: Number($("#rem-lead").value),
+      days: $("#rem-days").value === "all" ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5],
+    });
+    persist(); renderReminderList(); syncPush();
+  };
+  renderReminderList();
+}
+
+function renderReminderList() {
+  const el = $("#reminder-list"); if (!el) return;
+  el.innerHTML = (S.reminders || []).map(rem => `
+    <div class="route-item">
+      <div class="ri-main"><div class="name">${esc(rem.depLabel)} · Train ${esc(rem.trainNo)}</div>
+        <div class="sub">${esc(rem.fromName)} → ${esc(rem.toName)} · ${rem.lead}m before · ${rem.days.length === 7 ? "daily" : "weekdays"}</div></div>
+      <button class="ghost danger" data-id="${rem.id}">Remove</button>
+    </div>`).join("");
+  el.querySelectorAll("[data-id]").forEach(b => b.onclick = () => {
+    S.reminders = (S.reminders || []).filter(x => x.id !== b.dataset.id);
+    persist(); renderReminderList(); syncPush();
+  });
+}
+
+// ---------- morning briefing (setup UI) ----------
+function setupBriefing() {
+  const routeSel = $("#brief-route");
+  routeSel.innerHTML = S.routes.length
+    ? S.routes.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join("")
+    : `<option value="">Save a route first</option>`;
+  const b = S.briefing;
+  $("#brief-toggle").checked = !!(b && b.enabled);
+  if (b) { $("#brief-time").value = b.time || "06:45"; if (b.routeId) routeSel.value = b.routeId; }
+
+  const save = () => {
+    const enabled = $("#brief-toggle").checked;
+    const r = S.routes.find(x => x.id === routeSel.value) || S.routes[0];
+    if (enabled && !r) { $("#brief-toggle").checked = false; return; }
+    const time = $("#brief-time").value || "06:45";
+    const [h, m] = time.split(":").map(Number);
+    S.briefing = enabled && r
+      ? { enabled: true, time, timeSec: h * 3600 + m * 60, routeId: r.id, line: r.line,
+          from: r.home, to: r.work, fromName: r.homeName, toName: r.workName, days: [1, 2, 3, 4, 5] }
+      : null;
+    persist(); syncPush();
+  };
+  $("#brief-toggle").onchange = save;
+  $("#brief-time").onchange = save;
+  routeSel.onchange = save;
 }
 
 function findStation(name) {

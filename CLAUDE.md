@@ -1712,14 +1712,18 @@ jobs:
 | `GET /api/next?route=BNSF&from=X&to=Y&count=3` | The one the app uses: delay-merged trains + alerts + live position + journey stations |
 | `GET /api/alerts?route=BNSF` | Alerts only |
 | `GET /api/timetable?route=BNSF&from=X&to=Y&date=today\|tomorrow\|YYYYMMDD` | Full-day scheduled timetable for any date (incl. weekends), no realtime merge |
+| `GET /api/weather?lat=&lon=` | Hourly forecast periods via api.weather.gov (edge-cached 30 min) |
 | `GET /api/push/key` | VAPID public key for Web Push subscription |
-| `POST /api/push/subscribe` | Body `{subscription, lines[]}` — register for background alerts |
+| `POST /api/push/subscribe` | Body `{subscription, lines[], reminders[], briefing}` — register for background alerts |
 | `POST /api/push/unsubscribe` | Body `{endpoint}` — remove a subscription |
 
-**Background push:** a Worker cron (`*/2 * * * *`, see `wrangler.toml` `[triggers]`)
-runs `poller.js`, which diffs the realtime feed against `pushstate:<line>` in KV and
-sends Web Push (VAPID + RFC 8291 aes128gcm, all WebCrypto in `push.js`) to each
-`sub:<hash>` subscriber. Secrets: `VAPID_PRIVATE_JWK` (Worker secret); public key +
+**Background push:** a Worker cron (`*/15 * * * *`, see `wrangler.toml` `[triggers]`
+— kept low-frequency to stay well inside the free tier) runs `poller.js`, which:
+(a) diffs the realtime feed against `pushstate:<line>` in KV for new delays/alerts,
+(b) fires per-user **departure reminders** (delay-aware, matched by `depSec` +
+active service), and (c) **morning briefings**. Reminder/briefing config lives in the
+`sub:<hash>` record; `lastFired` (per day) dedupes. Web Push = VAPID + RFC 8291
+aes128gcm, all WebCrypto in `push.js`. Secrets: `VAPID_PRIVATE_JWK`; public key +
 `VAPID_SUBJECT` are `[vars]`. iOS delivers Web Push only to a Safari-installed PWA
 (iOS 16.4+), not to Chrome/other iOS browsers.
 | `GET /api/meta` | Ingest freshness timestamp |
