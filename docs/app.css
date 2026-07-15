@@ -155,6 +155,28 @@ main#content { padding: 16px; flex: 1; }
 .live-dot { color: var(--green); font-size: 11px; }
 .live-dot::before { content: "●"; margin-right: 4px; animation: pulse 1.8s ease-in-out infinite; display: inline-block; }
 
+/* ---- realtime status pills ---- */
+.status-pill {
+  display: inline-flex; align-items: center; gap: 5px; vertical-align: middle;
+  font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; margin-left: 6px;
+}
+.status-pill .pdot, .mini-status .pdot {
+  width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: currentColor;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.st-ontime { color: var(--green); background: rgba(29, 158, 117, 0.14); }
+.st-late { color: var(--amber); background: rgba(180, 83, 9, 0.15); }
+.st-sched { color: var(--muted); background: var(--border); }
+.st-cancel { color: var(--red); background: rgba(179, 38, 30, 0.14); }
+.mini-status { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; }
+.mini-status.st-ontime { color: var(--green); }
+.mini-status.st-late { color: var(--amber); }
+.mini-status .pdot { width: 5px; height: 5px; }
+.row .dep .was {
+  display: block; font-size: 11px; color: var(--muted);
+  text-decoration: line-through; font-weight: 400;
+}
+
 /* ---- journey bar ---- */
 .journey { margin: 14px 2px 2px; }
 .journey svg { width: 100%; height: 40px; display: block; }

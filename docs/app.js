@@ -468,7 +468,7 @@ function sectionHtml(d) {
     <div class="hero${expandedStops[d] ? " expanded" : ""}" data-dir="${d}">
       <div class="hero-top">
         <span><span class="chip ${next.class}">${next.class === "E" ? "Express" : "Local"}</span>
-        ${next.live ? `<span class="live-dot">live</span>` : ""}</span>
+        ${statusPill(next)}</span>
         <span class="train-no">Train ${esc(trainNoShort(next.trainNo))}</span>
       </div>
       <div class="times">
@@ -478,8 +478,7 @@ function sectionHtml(d) {
       <div class="status-row">
         ${next.cancelled
           ? `<span class="cancelled-tag">Cancelled</span>`
-          : `<span class="countdown" data-dep="${next.depEpochMs}">departs in ${fmtLive(next.depEpochMs)}</span>
-             ${next.delayMin > 0 ? `<span class="delay">+${next.delayMin} min delay</span>` : ""}`}
+          : `<span class="countdown" data-dep="${next.depEpochMs}">departs in ${fmtLive(next.depEpochMs)}</span>`}
       </div>
       ${next.cancelled ? "" : journeyBar(data, next, d)}
       ${next.cancelled ? "" : stopsPanel(data, next, d)}
@@ -487,13 +486,32 @@ function sectionHtml(d) {
     ${hint ? `<div class="hint">Express Train ${esc(trainNoShort(hint.trainNo))} leaves at ${hint.dep} (in ${hint.minutes} min) — worth waiting?</div>` : ""}
     <div class="list">
       ${rest.map(t => `
-        <div class="row ${t.cancelled ? "cancelled" : ""}">
-          <span class="dep">${t.dep}</span>
-          <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</span>
+        <div class="row ${t.cancelled ? "cancelled" : ""}${t.delayMin > 0 ? " late" : ""}">
+          <span class="dep">${t.delayMin > 0 ? `<span class="was">${t.depScheduled}</span>` : ""}${t.dep}</span>
+          <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}${miniStatus(t)}</span>
           <span class="right">${t.cancelled ? "Cancelled"
             : `<span data-dep="${t.depEpochMs}">${fmtCountdown(t.depEpochMs)}</span>${t.delayMin > 0 ? `<span class="delay">+${t.delayMin}m</span>` : ""}`}</span>
         </div>`).join("")}
     </div>`;
+}
+
+// Realtime status for a train: what the feed says vs the schedule.
+function liveStatus(t) {
+  if (t.cancelled) return { text: "Cancelled", cls: "st-cancel", live: false };
+  if (!t.live) return { text: "Scheduled", cls: "st-sched", live: false };
+  if (t.delayMin > 0) return { text: `${t.delayMin} min late`, cls: "st-late", live: true };
+  return { text: "On time", cls: "st-ontime", live: true };
+}
+// Full pill for the hero card.
+function statusPill(t) {
+  const s = liveStatus(t);
+  return `<span class="status-pill ${s.cls}">${s.live ? `<span class="pdot"></span>` : ""}${s.text}</span>`;
+}
+// Compact indicator for list rows — only shown when Metra is actively tracking.
+function miniStatus(t) {
+  if (t.cancelled || !t.live) return "";
+  const s = liveStatus(t);
+  return ` <span class="mini-status ${s.cls}"><span class="pdot"></span>${t.delayMin > 0 ? "late" : "on time"}</span>`;
 }
 
 // Journey bar: station ticks; live GPS marker if the positions feed has our train,

@@ -18,9 +18,9 @@ ALLOWED_ORIGIN = "https://abhishek16.github.io"
 VAPID_PUBLIC = "BHMlUTF-D-kjj9yMfm6dSNmWVI3hvU1MFpHCZDWIMTRQeOktlRak5tpHFxe8dj4072NIXweOUgR6201Z5OSDwyg"
 VAPID_SUBJECT = "mailto:resoluteacc@gmail.com"
 
-# Background push runs on a cron trigger (every 2 minutes).
+# Background push cron — every 15 min (~96 runs/day, well within free limits).
 [triggers]
-crons = ["*/2 * * * *"]
+crons = ["*/15 * * * *"]
 
 # 2) Metra key as a secret:  npx wrangler secret put METRA_API_KEY
 # 3) VAPID private key secret:  npx wrangler secret put VAPID_PRIVATE_JWK
