@@ -131,6 +131,8 @@ function lineColor(routeLine) {
   const l = lines.find(x => x.id === routeLine);
   return l ? l.color : "#005A45";
 }
+// "BNSF — Burlington Northern" so riders recognize the code and the full name.
+function lineLabel(l) { return `${l.id} — ${l.name}`; }
 
 // ============================================================
 // SETUP VIEW
@@ -139,7 +141,7 @@ function showSetup() {
   swapView("setup");
   const sel = $("#line");
   sel.innerHTML = `<option value="">Choose a line…</option>` +
-    lines.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
+    lines.map(l => `<option value="${l.id}">${esc(lineLabel(l))}</option>`).join("");
   if (!lines.length) $("#form-error").textContent = "Could not load lines — is the ingest done and KV bound?", $("#form-error").classList.remove("hidden");
 
   sel.onchange = async () => {
@@ -164,7 +166,7 @@ function showSetup() {
   // One-off trip picker (transient, not saved).
   const ooSel = $("#oo-line");
   ooSel.innerHTML = `<option value="">Choose a line…</option>` +
-    lines.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join("");
+    lines.map(l => `<option value="${l.id}">${esc(lineLabel(l))}</option>`).join("");
   ooSel.onchange = async () => {
     ooStations = []; $("#oo-from-list").innerHTML = $("#oo-to-list").innerHTML = "";
     if (!ooSel.value) return;
