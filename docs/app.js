@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown, fmtLive } from "./logic.js";
+import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown } from "./logic.js";
 import { API_BASE } from "./config.js";
 
 const $ = s => document.querySelector(s);
@@ -666,7 +666,7 @@ function sectionHtml(d) {
         <div class="hero-countdown">
           ${next.cancelled
             ? `<div class="cd-cancel">Cancelled</div>`
-            : `<div class="flapboard" data-dep="${next.depEpochMs}">${flapTiles(next.depEpochMs)}</div>`}
+            : `<div class="flapboard" data-dep="${next.depEpochMs}" data-sig="${flapSig(fmtFlap(next.depEpochMs))}">${flapCards(next.depEpochMs)}</div>`}
         </div>
       </div>
       ${next.cancelled ? "" : journeyBar(data, next, d)}
@@ -895,8 +895,8 @@ function maybeNotify(d, data) {
 function updateCountdowns() {
   document.querySelectorAll("[data-dep]").forEach(el => {
     const dep = Number(el.dataset.dep);
-    if (el.classList.contains("flapboard")) el.innerHTML = flapTiles(dep); // ticking flip-board
-    else el.textContent = fmtCountdown(dep);                               // list rows
+    if (el.classList.contains("flapboard")) updateFlap(el, dep); // animated flip-board
+    else el.textContent = fmtCountdown(dep);                     // list rows
   });
 }
 function swapView(name) {
@@ -907,8 +907,51 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<":
 // GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
 function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }
 function fmtDur(min) { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h ${m}m` : `${m}m`; }
-// Live countdown as split-flap departure-board tiles (one card per character).
-function flapTiles(epochMs) {
-  return fmtLive(epochMs).split("").map(ch =>
-    ch === ":" ? `<span class="flap colon">:</span>` : `<span class="flap">${ch}</span>`).join("");
+// ---------- split-flap countdown board ----------
+const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Padded MM:SS (or H:MM:SS) so the board keeps a fixed number of cards within an hour.
+function fmtFlap(epochMs) {
+  const s = Math.max(0, Math.floor((epochMs - Date.now()) / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const p = n => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
+}
+const flapSig = str => str.split("").map(c => (c === ":" ? ":" : "#")).join("");
+function cardOrColon(ch) {
+  return ch === ":"
+    ? `<div class="flip-colon">:</div>`
+    : `<div class="flip-card" data-ch="${ch}">
+         <div class="top"><span>${ch}</span></div>
+         <div class="bottom"><span>${ch}</span></div>
+         <div class="flip-top"><span>${ch}</span></div>
+         <div class="flip-bottom"><span>${ch}</span></div>
+       </div>`;
+}
+const flapCards = epochMs => fmtFlap(epochMs).split("").map(cardOrColon).join("");
+
+// Update a flapboard in place: flip only the cards whose character changed.
+function updateFlap(el, epochMs) {
+  const str = fmtFlap(epochMs);
+  const sig = flapSig(str);
+  if (el.dataset.sig !== sig) { el.innerHTML = str.split("").map(cardOrColon).join(""); el.dataset.sig = sig; return; }
+  const nodes = el.children;
+  str.split("").forEach((ch, i) => {
+    const node = nodes[i];
+    if (!node || ch === ":") return;
+    if (node.dataset.ch !== ch) flipCardTo(node, ch);
+  });
+}
+function flipCardTo(node, newCh) {
+  const oldCh = node.dataset.ch;
+  node.dataset.ch = newCh;
+  const set = (sel, v) => { const s = node.querySelector(sel); if (s) s.textContent = v; };
+  set(".top span", newCh); // new value waits behind the folding top card
+  if (REDUCE_MOTION) { set(".bottom span", newCh); return; }
+  set(".flip-top span", oldCh);
+  set(".bottom span", oldCh);
+  set(".flip-bottom span", newCh);
+  node.classList.remove("flipping"); void node.offsetWidth; node.classList.add("flipping");
+  clearTimeout(node._t);
+  node._t = setTimeout(() => { set(".bottom span", node.dataset.ch); node.classList.remove("flipping"); }, 340);
 }

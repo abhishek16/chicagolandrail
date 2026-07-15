@@ -145,26 +145,37 @@ main#content { padding: 16px; flex: 1; }
 .hero-countdown { flex-shrink: 0; }
 .cd-cancel { color: var(--red); font-weight: 700; font-size: 14px; padding-top: 6px; }
 /* split-flap (Solari) departure-board countdown */
-.flapboard { display: inline-flex; gap: 3px; align-items: stretch; }
-.flap {
-  position: relative; color: #fff;
-  background-image: linear-gradient(180deg,
-    color-mix(in srgb, var(--line) 24%, #2e333b),
-    color-mix(in srgb, var(--line) 15%, #1e222a));
-  font-family: var(--board); font-variant-numeric: tabular-nums; font-weight: 700;
-  font-size: 22px; line-height: 1; min-width: 22px; padding: 9px 5px;
-  border-radius: 6px; text-align: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16); text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+.flapboard { display: inline-flex; gap: 4px; align-items: center; }
+.flip-colon {
+  font-family: var(--board); font-weight: 700; font-size: 22px; color: var(--muted); padding: 0 1px;
 }
-.flap::after {
-  content: ""; position: absolute; left: 3px; right: 3px; top: 50%; height: 1px;
-  background: rgba(0, 0, 0, 0.4); transform: translateY(-0.5px);
+.flip-card {
+  position: relative; width: 25px; height: 40px; border-radius: 6px;
+  background: #16181c; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.22);
+  perspective: 160px; /* gives the flip its 3D depth */
 }
-.flap.colon {
-  background-image: none; box-shadow: none; text-shadow: none;
-  color: var(--muted); min-width: auto; padding: 9px 1px;
+.flip-card > div {
+  position: absolute; left: 0; width: 100%; height: 19px; overflow: hidden;
+  background-image: linear-gradient(180deg, #3a3f47, #2b2f37);
 }
-.flap.colon::after { display: none; }
+.flip-card > div span {
+  display: block; width: 100%; text-align: center;
+  font: 700 26px/40px var(--board); font-variant-numeric: tabular-nums;
+  color: #f3f1ea; text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+}
+.flip-card .top, .flip-card .flip-top { top: 0; border-radius: 6px 6px 0 0; }
+.flip-card .bottom, .flip-card .flip-bottom { bottom: 0; border-radius: 0 0 6px 6px; background-image: linear-gradient(180deg, #333840, #24272e); }
+.flip-card .bottom span, .flip-card .flip-bottom span { transform: translateY(-21px); }
+.flip-card .flip-top { transform-origin: bottom center; backface-visibility: hidden; z-index: 3; }
+.flip-card .flip-bottom { transform-origin: top center; backface-visibility: hidden; z-index: 3; transform: rotateX(90deg); }
+.flip-card .flip-top, .flip-card .flip-bottom { display: none; }
+.flip-card.flipping .flip-top { display: block; animation: flap-top 0.34s ease-in forwards; }
+.flip-card.flipping .flip-bottom { display: block; animation: flap-bottom 0.34s ease-out forwards; }
+@keyframes flap-top { 0% { transform: rotateX(0deg); } 50%, 100% { transform: rotateX(-90deg); } }
+@keyframes flap-bottom { 0%, 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .flip-card.flipping .flip-top, .flip-card.flipping .flip-bottom { animation: none; display: none; }
+}
 .times {
   font-family: var(--board); font-variant-numeric: tabular-nums;
   font-size: 25px; font-weight: 600; margin: 8px 0 0;
