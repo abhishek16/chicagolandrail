@@ -679,7 +679,7 @@ function sectionHtml(d) {
           <span class="dep">${t.delayMin > 0 ? `<span class="was">${t.depScheduled}</span>` : ""}${t.dep}</span>
           <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}${miniStatus(t)}</span>
           <span class="right">${t.cancelled ? "Cancelled"
-            : `<span data-dep="${t.depEpochMs}">${fmtCountdown(t.depEpochMs)}</span>${t.delayMin > 0 ? `<span class="delay">+${t.delayMin}m</span>` : ""}`}</span>
+            : `<span class="jt" title="Total journey time">${JT_ICON}${fmtDur(Math.round((t.arrEpochMs - t.depEpochMs) / 60000))}</span>`}</span>
         </div>`).join("")}
     </div>`;
 }
@@ -907,6 +907,8 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<":
 // GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
 function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }
 function fmtDur(min) { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h ${m}m` : `${m}m`; }
+// Small clock glyph marking a journey duration.
+const JT_ICON = `<svg class="jt-ico" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.6V8l2.4 1.4"/></svg>`;
 // ---------- split-flap countdown board ----------
 const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
