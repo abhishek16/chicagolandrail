@@ -15,6 +15,11 @@ let S = Object.assign({ routes: [], activeRouteId: null, settings: null, overrid
 const persist = () => store.save(S);
 
 let lines = [], stations = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
+// Monotonic token for the active board request. Every refresh/timetable render
+// captures the current value; after each await it bails if a newer request has
+// started (e.g. the rider switched routes), so a slow response from the previous
+// route can never write into lastData or paint the DOM. Strictly last-write-wins.
+let reqSeq = 0;
 let ttDate = null;               // null = live board; "YYYY-MM-DD" = schedule for that day
 let swReg = null;                // service-worker registration, for OS notifications
 let notifiedAlerts = new Set();  // alert ids we've already notified about
@@ -28,7 +33,7 @@ let ooStations = [];             // stations for the one-off line picker
 const cacheKey = id => "mct_cache_" + id;
 function saveCache() {
   const r = activeRoute(); if (!r) return;
-  try { localStorage.setItem(cacheKey(r.id), JSON.stringify({ data: lastData, savedAt: Date.now() })); } catch { /* quota */ }
+  try { localStorage.setItem(cacheKey(r.id), JSON.stringify({ routeId: r.id, data: lastData, savedAt: Date.now() })); } catch { /* quota */ }
 }
 function loadCache() {
   const r = activeRoute();
@@ -36,7 +41,8 @@ function loadCache() {
   if (!r) return;
   try {
     const c = JSON.parse(localStorage.getItem(cacheKey(r.id)) || "null");
-    if (c && c.data) lastData = c.data;
+    // Only trust a cache stamped with this exact route — never show another route's board.
+    if (c && c.data && c.routeId === r.id) lastData = c.data;
   } catch { /* corrupt */ }
 }
 // Whole days since the GTFS static feed was last ingested (null if unknown).
@@ -489,17 +495,19 @@ async function refresh() {
   const route = activeRoute();
   if (!route) return showSetup();
 
+  const seq = ++reqSeq; // this refresh's token; a route switch bumps it and voids us
   const modified = Object.values(lastData).some(d => d && d.serviceNote);
   const dir = resolveDirection(settings(), S.override, new Date(), modified);
   const dirs = dir === "BOTH" ? ["HW", "WH"] : [dir];
   renderControls(dir);
-  if (ttDate) return renderTimetable(dirs);
+  if (ttDate) return renderTimetable(dirs, seq);
 
   let offline = false;
   for (const d of dirs) {
     const [from, to] = d === "HW" ? [route.home, route.work] : [route.work, route.home];
     try {
       const data = await api(`/api/next?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&count=3`);
+      if (seq !== reqSeq) return; // newer request started — this is a stale response, drop it
       data.fetchedAt = Date.now();
       lastData[d] = data;
       maybeNotify(d, data);
@@ -508,6 +516,7 @@ async function refresh() {
     }
   }
 
+  if (seq !== reqSeq) return; // route/view changed while we awaited — don't paint stale data
   if (!offline) saveCache(); // persist last-good board for offline opens
   render(dirs, offline);
 }
@@ -570,7 +579,7 @@ function render(dirs, offline) {
 }
 
 // Full-day scheduled timetable for any date (incl. weekends) — no realtime merge.
-async function renderTimetable(dirs) {
+async function renderTimetable(dirs, seq = reqSeq) {
   const route = activeRoute();
   $("#route-title").innerHTML = dirs.length === 2
     ? `${esc(route.homeName)} <span class="arrow">⇆</span> ${esc(route.workName)}`
@@ -589,6 +598,7 @@ async function renderTimetable(dirs) {
     html += `<div class="direction-head">${dirTitle(d)}</div>`;
     try {
       const data = await api(`/api/timetable?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${ttDate.replace(/-/g, "")}`);
+      if (seq !== reqSeq) return; // route/date changed mid-load — abandon this stale timetable
       note = note || data.serviceNote;
       html += data.trains.length
         ? `<div class="list tt">` + data.trains.map(t => `
@@ -604,6 +614,7 @@ async function renderTimetable(dirs) {
       html += `<div class="muted" style="padding:8px 2px 14px">Couldn't load timetable.</div>`;
     }
   }
+  if (seq !== reqSeq) return; // a newer route/view took over while we awaited — don't paint
   $("#content").innerHTML = html;
   if (note) {
     const b = $("#banner");
