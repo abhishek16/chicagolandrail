@@ -58,12 +58,10 @@
           <div class="card">
             <label>Line <select id="line"><option value="">Loading lines…</option></select></label>
             <label>Home station
-              <input id="home" list="home-list" placeholder="Type to search…" autocomplete="off">
-              <datalist id="home-list"></datalist>
+              <select id="home"><option value="">Choose a line first…</option></select>
             </label>
             <label>Work station
-              <input id="work" list="work-list" placeholder="Type to search…" autocomplete="off">
-              <datalist id="work-list"></datalist>
+              <select id="work"><option value="">Choose a line first…</option></select>
             </label>
             <label>Label (optional) <input id="label" placeholder="Daily commute"></label>
             <button id="save-route" class="primary">Save route</button>
@@ -77,12 +75,10 @@
           <div class="card">
             <label>Line <select id="oo-line"><option value="">Choose a line…</option></select></label>
             <label>From
-              <input id="oo-from" list="oo-from-list" placeholder="Type to search…" autocomplete="off">
-              <datalist id="oo-from-list"></datalist>
+              <select id="oo-from"><option value="">Choose a line first…</option></select>
             </label>
             <label>To
-              <input id="oo-to" list="oo-to-list" placeholder="Type to search…" autocomplete="off">
-              <datalist id="oo-to-list"></datalist>
+              <select id="oo-to"><option value="">Choose a line first…</option></select>
             </label>
             <button id="oo-go" class="primary">View trip</button>
             <p id="oo-error" class="error hidden"></p>

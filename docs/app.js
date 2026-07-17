@@ -152,12 +152,16 @@ function showSetup() {
 
   sel.onchange = async () => {
     stations = [];
+    $("#home").innerHTML = $("#work").innerHTML = `<option value="">Choose a line first…</option>`;
+    $("#form-error").classList.add("hidden");
     if (!sel.value) return;
-    $("#home-list").innerHTML = $("#work-list").innerHTML = "";
-    const data = await api(`/api/stops?route=${encodeURIComponent(sel.value)}`);
-    stations = data.stations;
-    const opts = stations.map(s => `<option value="${esc(s.name)}">`).join("");
-    $("#home-list").innerHTML = opts; $("#work-list").innerHTML = opts;
+    try {
+      stations = (await api(`/api/stops?route=${encodeURIComponent(sel.value)}`)).stations;
+      $("#home").innerHTML = $("#work").innerHTML = stationOptions(stations);
+    } catch {
+      $("#form-error").textContent = "Couldn't load stations for that line — check your connection and try again.";
+      $("#form-error").classList.remove("hidden");
+    }
   };
 
   const st = settings();
@@ -174,21 +178,25 @@ function showSetup() {
   ooSel.innerHTML = `<option value="">Choose a line…</option>` +
     lines.map(l => `<option value="${l.id}">${esc(lineLabel(l))}</option>`).join("");
   ooSel.onchange = async () => {
-    ooStations = []; $("#oo-from-list").innerHTML = $("#oo-to-list").innerHTML = "";
+    ooStations = [];
+    $("#oo-from").innerHTML = $("#oo-to").innerHTML = `<option value="">Choose a line first…</option>`;
+    $("#oo-error").classList.add("hidden");
     if (!ooSel.value) return;
-    try { ooStations = (await api(`/api/stops?route=${encodeURIComponent(ooSel.value)}`)).stations; } catch { ooStations = []; }
-    const opts = ooStations.map(s => `<option value="${esc(s.name)}">`).join("");
-    $("#oo-from-list").innerHTML = opts; $("#oo-to-list").innerHTML = opts;
+    try {
+      ooStations = (await api(`/api/stops?route=${encodeURIComponent(ooSel.value)}`)).stations;
+      $("#oo-from").innerHTML = $("#oo-to").innerHTML = stationOptions(ooStations);
+    } catch {
+      $("#oo-error").textContent = "Couldn't load stations — check your connection.";
+      $("#oo-error").classList.remove("hidden");
+    }
   };
   $("#oo-go").onclick = () => {
     const err = $("#oo-error"); err.classList.add("hidden");
     const fail = m => { err.textContent = m; err.classList.remove("hidden"); };
-    const find = name => {
-      const n = (name || "").trim().toLowerCase(); if (!n) return null;
-      return ooStations.find(s => s.name.toLowerCase() === n) || ooStations.find(s => s.name.toLowerCase().includes(n));
-    };
-    const line = ooSel.value, from = find($("#oo-from").value), to = find($("#oo-to").value);
-    if (!line || !from || !to) return fail("Pick a line and valid from & to stations.");
+    const line = ooSel.value;
+    const from = ooStations.find(s => s.id === $("#oo-from").value);
+    const to = ooStations.find(s => s.id === $("#oo-to").value);
+    if (!line || !from || !to) return fail("Pick a line and both stations.");
     if (from.id === to.id) return fail("From and to must be different.");
     oneOff = { id: "__oneoff", line, home: from.id, homeName: from.name, work: to.id, workName: to.name, label: `${from.name} → ${to.name}` };
     showMain();
@@ -321,16 +329,19 @@ function fmtTime12(hhmm) {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
 
-function findStation(name) {
-  const n = (name || "").trim().toLowerCase();
-  if (!n) return null; // empty input must not match the first station via .includes("")
-  return stations.find(s => s.name.toLowerCase() === n) || stations.find(s => s.name.toLowerCase().includes(n));
+// <option> markup for a station <select>, with a leading placeholder. Native
+// selects work on every browser (incl. the Tesla in-car browser, which does not
+// render <datalist> suggestions); the value is the GTFS stop id.
+function stationOptions(sts) {
+  return `<option value="">Choose a station…</option>` +
+    sts.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
 }
+function stationById(id) { return stations.find(s => s.id === id) || null; }
 
 // Returns true if a route was saved, false (with an inline error) if not.
 function saveRoute() {
   const err = $("#form-error"); err.classList.add("hidden");
-  const line = $("#line").value, home = findStation($("#home").value), work = findStation($("#work").value);
+  const line = $("#line").value, home = stationById($("#home").value), work = stationById($("#work").value);
   const fail = m => { err.textContent = m; err.classList.remove("hidden"); return false; };
   if (!line || !home || !work) return fail("Pick a line and valid home & work stations.");
   if (home.id === work.id) return fail("Home and work stations must be different.");
