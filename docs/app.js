@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown } from "./logic.js";
-import { API_BASE } from "./config.js";
+import { API_BASE, CF_ANALYTICS_TOKEN } from "./config.js";
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 30000;
@@ -61,6 +61,7 @@ const X_HANDLES = {
 // ---------- boot ----------
 init();
 async function init() {
+  initAnalytics();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").then(r => swReg = r).catch(() => {});
   try { lines = await api("/api/lines"); } catch { lines = []; }
   api("/api/meta").then(m => { meta = m; }).catch(() => {}); // for stale-data warning
@@ -70,6 +71,18 @@ async function init() {
 
 function activeRoute() { return oneOff || S.routes.find(r => r.id === S.activeRouteId) || S.routes[0] || null; }
 function settings() { return S.settings || DEFAULT_SETTINGS; }
+
+// Privacy-first, cookieless page analytics (Cloudflare Web Analytics). Loads only
+// when a token is set in config.js — no personal data, no cookies, no consent
+// banner needed; it just gives an aggregate visitor count.
+function initAnalytics() {
+  if (!CF_ANALYTICS_TOKEN) return;
+  const s = document.createElement("script");
+  s.defer = true;
+  s.src = "https://static.cloudflareinsights.com/beacon.min.js";
+  s.setAttribute("data-cf-beacon", JSON.stringify({ token: CF_ANALYTICS_TOKEN }));
+  document.head.appendChild(s);
+}
 
 // One quick retry with backoff smooths over cell-network blips on the train.
 async function api(path, retries = 1) {
@@ -365,9 +378,11 @@ function saveRoute() {
   S.routes.push(r);
   S.activeRouteId = r.id; // the route you just added becomes the one you view
   persist();
-  $("#home").value = $("#work").value = $("#label").value = "";
+  $("#label").value = "";
   syncPush();
-  showMain(); // straight to the trains for the route you just saved
+  renderRouteList();
+  flashOk("#route-ok");
+  updateGates({ scroll: true }); // continue the guided flow → unlock & scroll to the next step
   return true;
 }
 
@@ -401,11 +416,10 @@ function renderRouteList() {
       e.stopPropagation();
       S.routes = S.routes.filter(x => x.id !== r.id);
       if (S.activeRouteId === r.id) S.activeRouteId = S.routes[0]?.id || null;
-      persist(); renderRouteList(); syncPush();
+      persist(); renderRouteList(); syncPush(); updateGates(); // re-lock if last route removed
     };
     el.appendChild(div);
   }
-  updateGates();
 }
 
 // Progressive setup: downstream sections stay locked until their prerequisite is
@@ -414,8 +428,10 @@ function renderRouteList() {
 function updateGates({ scroll = false } = {}) {
   const hasRoute = S.routes.length > 0;
   const notif = !!S.notify;
+  // completed-step checkmarks
+  const rs = $("#sec-routes"); if (rs) rs.classList.toggle("done", hasRoute);
+  const ns = $("#sec-notif"); if (ns) ns.classList.toggle("done", notif);
   const gates = [
-    ["#sec-windows", hasRoute],
     ["#sec-notif", hasRoute],
     ["#sec-reminders", hasRoute && notif],
     ["#sec-briefing", hasRoute && notif],
@@ -468,7 +484,7 @@ function renderSocial(route) {
   const handle = X_HANDLES[route.line] || "Metra";
   $("#social").innerHTML = `
     <details class="social">
-      <summary>&#128226; Service updates — <a href="https://x.com/${handle}" target="_blank" rel="noopener">@${handle}</a> on X</summary>
+      <summary>Service updates — <a href="https://x.com/${handle}" target="_blank" rel="noopener">@${handle}</a> on X</summary>
       <div class="social-body"><div class="muted small">Tap to load the latest posts…</div></div>
     </details>`;
   const det = $("#social details");
@@ -506,8 +522,8 @@ function loadWidgets() {
 function renderControls(dir) {
   const r = activeRoute();
   const view = ttDate ? "schedule" : "live";
-  $("#view-tabs").innerHTML = [["live", "● Live"], ["schedule", "🗓 Schedule"]]
-    .map(([v, l]) => `<button data-v="${v}" class="${view === v ? "on" : ""}" role="tab" aria-selected="${view === v}">${l}</button>`).join("");
+  $("#view-tabs").innerHTML = [["live", "Live", true], ["schedule", "Schedule", false]]
+    .map(([v, l, live]) => `<button data-v="${v}" class="${view === v ? "on" : ""}" role="tab" aria-selected="${view === v}">${live ? `<span class="tab-live"></span>` : ""}${l}</button>`).join("");
   $("#view-tabs").querySelectorAll("button").forEach(b =>
     b.onclick = () => { ttDate = b.dataset.v === "live" ? null : (ttDate || todayISO()); refresh(); });
 
