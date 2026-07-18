@@ -221,10 +221,12 @@ function showSetup() {
   try { setupReminders(); } catch (e) { console.error("reminders setup failed", e); }
   try { setupBriefing(); } catch (e) { console.error("briefing setup failed", e); }
 
-  // Replace every native <select> with a tap-friendly dropdown (Tesla browser).
+  // Replace native <select>/<input type=time> popups with tap-friendly widgets
+  // so every picker works in browsers that won't open native popups (Tesla).
   ["#line", "#home", "#work", "#oo-line", "#oo-from", "#oo-to",
     "#rem-route", "#rem-dir", "#rem-train", "#rem-lead", "#rem-days", "#brief-route"]
     .forEach(s => enhanceSelect($(s)));
+  ["#m0", "#m1", "#e0", "#e1", "#brief-time"].forEach(s => enhanceTime($(s)));
 }
 
 // ---------- departure reminders (setup UI) ----------
@@ -606,8 +608,15 @@ async function renderTimetable(dirs, seq = reqSeq) {
 
   const chips = quickDays().map(c =>
     `<button class="chip-day ${c.iso === ttDate ? "on" : ""}" data-iso="${c.iso}">${c.label}</button>`).join("");
+  // Date picker as a dropdown of the next 21 days (native <input type=date>
+  // popups don't open in the Tesla browser); quick chips above cover the common ones.
+  const dateOpts = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i)).map(dt => {
+    const iso = fmtISO(dt);
+    const label = dt.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    return `<option value="${iso}"${iso === ttDate ? " selected" : ""}>${esc(label)}</option>`;
+  }).join("");
   let html = `<div class="datebar">${chips}
-    <input type="date" id="tt-date" min="${todayISO()}" max="${isoPlus(20)}" value="${ttDate}" aria-label="Pick a date"></div>`;
+    <select id="tt-date" aria-label="Pick a date">${dateOpts}</select></div>`;
 
   let note = null;
   for (const d of dirs) {
@@ -640,6 +649,7 @@ async function renderTimetable(dirs, seq = reqSeq) {
   }
   $("#content").querySelectorAll(".chip-day").forEach(b => b.onclick = () => { ttDate = b.dataset.iso; refresh(); });
   $("#tt-date").onchange = e => { if (e.target.value) { ttDate = e.target.value; refresh(); } };
+  enhanceSelect($("#tt-date")); // tap-friendly dropdown (Tesla browser)
   $("#updated").textContent = new Date(ttDate + "T00:00").toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
   $("#rt-status").textContent = "scheduled times";
   document.title = `${dirLabel(dirs)} · Schedule`;
@@ -999,6 +1009,47 @@ function enhanceSelect(sel) {
   syncLabel();
   sel.addEventListener("change", syncLabel);
   new MutationObserver(syncLabel).observe(sel, { childList: true }); // options repopulated → refresh label
+}
+
+// Custom time picker: hour + minute dropdowns (themselves tap-friendly via
+// enhanceSelect) writing back to the hidden native <input type="time">, which
+// stays as the data source so saveWindows/briefing code reads .value unchanged.
+// Native time popups don't open in the Tesla browser.
+function enhanceTime(input) {
+  if (!input || input._enhanced) return;
+  input._enhanced = true;
+  input.classList.add("cs-native");
+
+  const wrap = document.createElement("span");
+  wrap.className = "cs-time";
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+
+  const pad = n => String(n).padStart(2, "0");
+  const [h0, m0] = (input.value || "00:00").split(":").map(Number);
+  const mins = [];
+  for (let m = 0; m < 60; m += 5) mins.push(m);
+  if (!mins.includes(m0)) { mins.push(m0); mins.sort((a, b) => a - b); } // keep off-step values like 23:59
+
+  const hourSel = document.createElement("select");
+  const minSel = document.createElement("select");
+  hourSel.innerHTML = Array.from({ length: 24 }, (_, h) =>
+    `<option value="${pad(h)}"${h === h0 ? " selected" : ""}>${pad(h)}</option>`).join("");
+  minSel.innerHTML = mins.map(m =>
+    `<option value="${pad(m)}"${m === m0 ? " selected" : ""}>${pad(m)}</option>`).join("");
+
+  const colon = document.createElement("span");
+  colon.className = "cs-time-colon"; colon.textContent = ":";
+  wrap.appendChild(hourSel); wrap.appendChild(colon); wrap.appendChild(minSel);
+
+  const commit = () => {
+    input.value = `${hourSel.value}:${minSel.value}`;
+    input.dispatchEvent(new Event("change", { bubbles: true })); // fires saveWindows / briefing save
+  };
+  hourSel.addEventListener("change", commit);
+  minSel.addEventListener("change", commit);
+  enhanceSelect(hourSel);
+  enhanceSelect(minSel);
 }
 // GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
 function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }

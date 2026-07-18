@@ -240,10 +240,6 @@ main#content { padding: 16px; flex: 1; }
 }
 .chip-day:hover:not(.on) { color: var(--text); }
 .chip-day.on { background: var(--line); border-color: var(--line); color: #fff; font-weight: 600; }
-#tt-date {
-  background: var(--bg); color: var(--text); border: 1px solid var(--border);
-  border-radius: 10px; padding: 6px 10px; font-size: 13px; margin-left: auto;
-}
 
 /* ---- X (twitter) service updates ---- */
 #social { padding: 0 16px 4px; }
@@ -346,6 +342,15 @@ label .cs { margin-top: 5px; }
 /* compact variant in the sticky header (route switcher) */
 .header-row .cs { flex: 0 1 auto; min-width: 0; max-width: 320px; }
 .header-row .cs-btn { height: 36px; padding: 0 10px; font-size: 13px; font-weight: 500; }
+
+/* time picker: hour + minute dropdowns side by side */
+.cs-time { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+.cs-time .cs { flex: 1 1 0; min-width: 0; margin-top: 0; }
+.cs-time-colon { color: var(--muted); font-weight: 700; }
+
+/* schedule date dropdown sits at the right end of the date bar */
+.datebar .cs { margin-left: auto; flex: 0 0 auto; }
+.datebar .cs-btn { width: auto; padding: 6px 12px; font-size: 13px; }
 button.primary {
   background: var(--line); color: #fff; border: none; border-radius: 10px;
   padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
