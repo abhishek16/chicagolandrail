@@ -8,10 +8,11 @@ binding = "GTFS"
 id = "6cf1b8248edd4bee82fb8b77065610b1"
 
 [vars]
-# Set to your GitHub Pages origin to lock CORS (recommended before launch).
-# Examples: "https://abhishek16.github.io"  (user site or project site share this origin)
-# Leave "*" while testing.
-ALLOWED_ORIGIN = "https://abhishek16.github.io"
+# CORS allowlist (comma-separated). The Worker echoes whichever listed origin
+# made the request, so the Cloudflare Pages site and the old GitHub Pages URL
+# both work during cutover. Add a custom domain here later (e.g.
+# "https://chicagorail.app") — no code change needed. "*" = any (testing only).
+ALLOWED_ORIGIN = "https://chicagolandrail.pages.dev,https://abhishek16.github.io"
 
 # Web Push (background alerts). Public VAPID key + contact are public; the
 # private key is a secret:  npx wrangler secret put VAPID_PRIVATE_JWK

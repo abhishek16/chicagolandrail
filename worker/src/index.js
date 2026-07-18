@@ -1,10 +1,11 @@
 // Chicagoland Rail — standalone API Worker (Metra GTFS data).
-// Frontend lives on GitHub Pages; this Worker holds the Metra key, decodes the
-// realtime protobuf feeds, and is the only thing that contacts Metra.
+// Frontend is a static site on Cloudflare Pages; this Worker holds the Metra
+// key, decodes the realtime protobuf feeds, and is the only thing that contacts
+// Metra.
 //
 // Because the frontend is a public static site, there is no client secret to
 // protect (anything shipped to the browser is public). Access control here is:
-//   - CORS locked to your GitHub Pages origin (browser enforcement)
+//   - CORS locked to an allowlist of your site origins (browser enforcement)
 //   - optional Cloudflare rate-limiting rule on the route (real quota control)
 // The Metra API key stays server-side in a Worker secret regardless.
 
@@ -13,8 +14,19 @@ import { fetchFeed, indexTripUpdates, delayAt, alertsForRoute, positionFor } fro
 import { runPushCycle } from "./poller.js";
 import { weatherFor } from "./weather.js";
 
-function cors(env) {
-  const origin = env.ALLOWED_ORIGIN || "*";
+// CORS: ALLOWED_ORIGIN is a comma-separated allowlist. We echo the caller's
+// Origin when it's on the list, so the Cloudflare Pages site, a future custom
+// domain, and the old GitHub Pages origin can all be served at once without
+// weakening to "*". A value of "*" allows any origin (testing only).
+function allowedOrigin(env, request) {
+  const reqOrigin = request.headers.get("Origin") || "";
+  const list = String(env.ALLOWED_ORIGIN || "*").split(",").map(s => s.trim()).filter(Boolean);
+  if (list.includes("*")) return "*";
+  if (reqOrigin && list.includes(reqOrigin)) return reqOrigin;
+  return list[0] || "*"; // unlisted origin → the browser blocks it; send a stable default
+}
+
+function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -24,19 +36,31 @@ function cors(env) {
   };
 }
 
+// CORS headers are applied centrally in fetch(); env is kept so callers are unchanged.
 function json(env, data, status = 200, cacheSeconds = 0) {
-  const res = baseJson(data, status, cacheSeconds);
-  const h = cors(env);
-  for (const k in h) res.headers.set(k, h[k]);
-  return res;
+  return baseJson(data, status, cacheSeconds);
 }
 
 export default {
   async fetch(request, env, ctx) {
-    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
+    const res = await route(request, env, ctx);
+    const h = corsHeaders(allowedOrigin(env, request));
+    for (const k in h) res.headers.set(k, h[k]);
+    return res;
+  },
 
-    const url = new URL(request.url);
-    const waitUntil = ctx.waitUntil.bind(ctx);
+  // Cron trigger — send background push notifications for new delays/alerts.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runPushCycle(env));
+  },
+};
+
+// All request routing; CORS headers are added by fetch() above.
+async function route(request, env, ctx) {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+
+  const url = new URL(request.url);
+  const waitUntil = ctx.waitUntil.bind(ctx);
 
     try {
       if (request.method === "POST") {
@@ -94,13 +118,7 @@ export default {
     } catch (e) {
       return json(env, { error: e.message || String(e) }, e.status || 500);
     }
-  },
-
-  // Cron trigger — send background push notifications for new delays/alerts.
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(runPushCycle(env));
-  },
-};
+}
 
 async function sha256hex(s) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
