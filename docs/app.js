@@ -212,9 +212,11 @@ function showSetup() {
         if (p !== "granted") { e.target.checked = false; return; }
       }
       S.notify = true; persist();
+      updateGates({ scroll: true }); // unlock reminders + briefing, scroll to them
       await subscribePush();
     } else {
       S.notify = false; persist();
+      updateGates(); // re-lock reminders + briefing
       await unsubscribePush();
     }
   };
@@ -227,6 +229,7 @@ function showSetup() {
     "#rem-route", "#rem-dir", "#rem-train", "#rem-lead", "#rem-days", "#brief-route"]
     .forEach(s => enhanceSelect($(s)));
   ["#m0", "#m1", "#e0", "#e1", "#brief-time"].forEach(s => enhanceTime($(s)));
+  updateGates(); // set initial locked/unlocked state (no scroll on first paint)
 }
 
 // ---------- departure reminders (setup UI) ----------
@@ -279,7 +282,7 @@ function setupReminders() {
       days: $("#rem-days").value === "all" ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5],
     });
     persist(); renderReminderList(); syncPush();
-    if (!S.notify) show("Reminder saved — turn on Notifications above to actually receive it.");
+    flashOk("#rem-ok");
   };
   renderReminderList();
 }
@@ -402,6 +405,39 @@ function renderRouteList() {
     };
     el.appendChild(div);
   }
+  updateGates();
+}
+
+// Progressive setup: downstream sections stay locked until their prerequisite is
+// met (a saved route, then notifications on), then unlock with a smooth scroll +
+// highlight so the whole page reads as one guided flow.
+function updateGates({ scroll = false } = {}) {
+  const hasRoute = S.routes.length > 0;
+  const notif = !!S.notify;
+  const gates = [
+    ["#sec-windows", hasRoute],
+    ["#sec-notif", hasRoute],
+    ["#sec-reminders", hasRoute && notif],
+    ["#sec-briefing", hasRoute && notif],
+  ];
+  let unlocked = null;
+  for (const [sel, open] of gates) {
+    const el = $(sel); if (!el) continue;
+    const was = el.classList.contains("locked");
+    el.classList.toggle("locked", !open);
+    if (was && open && !unlocked) unlocked = el; // first section that just opened
+  }
+  if (scroll && unlocked) {
+    unlocked.scrollIntoView({ behavior: REDUCE_MOTION ? "auto" : "smooth", block: "start" });
+    unlocked.classList.remove("just-unlocked"); void unlocked.offsetWidth; unlocked.classList.add("just-unlocked");
+  }
+}
+
+// Briefly show a success note (e.g. "✓ Reminder added"), then fade it out.
+function flashOk(sel) {
+  const el = $(sel); if (!el) return;
+  el.classList.remove("hidden");
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.add("hidden"), 2500);
 }
 
 // ============================================================

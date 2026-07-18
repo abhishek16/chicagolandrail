@@ -376,6 +376,23 @@ button.ghost.danger { color: var(--red); }
 .setup-top { display: flex; justify-content: flex-end; padding: 10px 16px 0; }
 #setup-done { font-weight: 600; }
 
+/* ---- progressive setup gating (guided workflow) ---- */
+#view-setup section > * { transition: opacity 0.35s ease; }
+section.locked { pointer-events: none; }
+section.locked > *:not(.lock-hint) { opacity: 0.45; }
+.lock-hint { display: none; color: var(--muted); margin: 0 0 12px; }
+.lock-hint::before { content: "🔒 "; }
+section.locked .lock-hint { display: block; }
+.ok { color: var(--green); font-weight: 600; margin-top: 8px; }
+.just-unlocked .card { animation: unlockring 1.4s ease-out; }
+@keyframes unlockring {
+  0% { box-shadow: 0 0 0 3px rgba(29, 158, 117, 0.55); }
+  100% { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #view-setup section > *, .just-unlocked .card { transition: none; animation: none; }
+}
+
 .disclaimer {
   padding: 8px 16px calc(14px + env(safe-area-inset-bottom));
   font-size: 10px; line-height: 1.5; color: var(--muted); text-align: center;

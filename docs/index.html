@@ -85,26 +85,33 @@
           </div>
         </section>
 
-        <section>
+        <section id="sec-windows">
           <h2>Direction windows</h2>
-          <div class="grid2">
-            <label>Morning starts <input id="m0" type="time"></label>
-            <label>Morning ends <input id="m1" type="time"></label>
-            <label>Evening starts <input id="e0" type="time"></label>
-            <label>Evening ends <input id="e1" type="time"></label>
+          <p class="lock-hint small">Add a route above to set these up.</p>
+          <div class="card">
+            <div class="grid2">
+              <label>Morning starts <input id="m0" type="time"></label>
+              <label>Morning ends <input id="m1" type="time"></label>
+              <label>Evening starts <input id="e0" type="time"></label>
+              <label>Evening ends <input id="e1" type="time"></label>
+            </div>
+            <p class="muted small" style="margin-bottom:0">Morning shows Home → Work, evening Work → Home. Outside those windows, weekends, and holidays show both directions.</p>
           </div>
-          <p class="muted small">Morning shows Home → Work, evening Work → Home. Outside those windows, weekends, and holidays show both directions.</p>
         </section>
 
-        <section>
+        <section id="sec-notif">
           <h2>Notifications</h2>
-          <label class="check"><input type="checkbox" id="notif-toggle"> Notify me about new delays, cancellations, and service alerts while this page is open</label>
-          <p id="notif-note" class="muted small"></p>
+          <p class="lock-hint small">Add a route above to set these up.</p>
+          <div class="card">
+            <label class="check"><input type="checkbox" id="notif-toggle"> Notify me about new delays, cancellations, and service alerts while this page is open</label>
+            <p id="notif-note" class="muted small" style="margin-bottom:0"></p>
+          </div>
         </section>
 
-        <section>
+        <section id="sec-reminders">
           <h2>Departure reminders</h2>
-          <p class="muted small">A push before a chosen train, with its live delay. Needs notifications on.</p>
+          <p class="muted small">A push before a chosen train, with its live delay.</p>
+          <p class="lock-hint small">Turn on notifications above to set up reminders.</p>
           <div id="reminder-list"></div>
           <div class="card">
             <label>Route <select id="rem-route"></select></label>
@@ -116,18 +123,22 @@
             </div>
             <button id="rem-add" class="primary">Add reminder</button>
             <p id="rem-error" class="error hidden"></p>
+            <p id="rem-ok" class="ok small hidden">✓ Reminder added</p>
           </div>
         </section>
 
-        <section>
+        <section id="sec-briefing">
           <h2>Morning briefing</h2>
           <p class="muted small">A daily summary of your next train and any alerts.</p>
-          <label class="check"><input type="checkbox" id="brief-toggle"> Send me a morning briefing</label>
-          <div class="grid2">
-            <label>Time <input id="brief-time" type="time" value="06:45"></label>
-            <label>Route <select id="brief-route"></select></label>
+          <p class="lock-hint small">Turn on notifications above to set up a briefing.</p>
+          <div class="card">
+            <label class="check"><input type="checkbox" id="brief-toggle"> Send me a morning briefing</label>
+            <div class="grid2">
+              <label>Time <input id="brief-time" type="time" value="06:45"></label>
+              <label>Route <select id="brief-route"></select></label>
+            </div>
+            <p id="brief-note" class="muted small" style="margin-bottom:0"></p>
           </div>
-          <p id="brief-note" class="muted small"></p>
         </section>
 
         <p class="muted small" style="margin-top:20px">Changes here save automatically. Tap a saved route above, or <b>View trains</b>, to see departures.</p>
