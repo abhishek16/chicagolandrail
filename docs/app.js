@@ -220,6 +220,11 @@ function showSetup() {
   };
   try { setupReminders(); } catch (e) { console.error("reminders setup failed", e); }
   try { setupBriefing(); } catch (e) { console.error("briefing setup failed", e); }
+
+  // Replace every native <select> with a tap-friendly dropdown (Tesla browser).
+  ["#line", "#home", "#work", "#oo-line", "#oo-from", "#oo-to",
+    "#rem-route", "#rem-dir", "#rem-train", "#rem-lead", "#rem-days", "#brief-route"]
+    .forEach(s => enhanceSelect($(s)));
 }
 
 // ---------- departure reminders (setup UI) ----------
@@ -412,6 +417,7 @@ function showMain() {
     oneOff = null;
     S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; showMain();
   };
+  enhanceSelect($("#route-picker")); // tap-friendly dropdown (Tesla browser)
   $("#settings-btn").onclick = () => { stopPolling(); showSetup(); };
   renderSocial(route);
   loadCache(); // hydrate last-good board so an offline open shows something
@@ -926,6 +932,74 @@ function swapView(name) {
   $("#view-setup").classList.toggle("hidden", name !== "setup");
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+// ---------- tap-friendly dropdown ----------
+// The Tesla in-car browser (and some embedded webviews) won't open native
+// <select> popups, so the rider can't pick anything and the app is unusable.
+// Fix: keep the real <select> in the DOM as the source of truth — so every
+// existing .value / .innerHTML / change-event path keeps working — but hide its
+// native popup and drive it from a custom button + option list made of plain
+// elements. A MutationObserver re-syncs the button label whenever options are
+// (re)populated, so the many call sites that fill these selects need no changes.
+function enhanceSelect(sel) {
+  if (!sel || sel._enhanced) return;
+  sel._enhanced = true;
+
+  const wrap = document.createElement("span");
+  wrap.className = "cs";
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.appendChild(sel);                 // native select stays, just visually hidden
+  sel.classList.add("cs-native");
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "cs-btn";
+  btn.setAttribute("aria-haspopup", "listbox");
+  btn.setAttribute("aria-expanded", "false");
+
+  const panel = document.createElement("div");
+  panel.className = "cs-panel";
+  panel.setAttribute("role", "listbox");
+  panel.hidden = true;
+  wrap.appendChild(btn);
+  wrap.appendChild(panel);
+
+  const syncLabel = () => {
+    const o = sel.selectedOptions && sel.selectedOptions[0];
+    btn.innerHTML = `<span class="cs-text${sel.value ? "" : " cs-placeholder"}">${esc(o ? o.textContent : "")}</span><span class="cs-caret" aria-hidden="true">▾</span>`;
+  };
+  const close = () => {
+    panel.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", onDoc, true);
+  };
+  const onDoc = e => { if (!wrap.contains(e.target)) close(); };
+  const open = () => {
+    panel.innerHTML = "";
+    for (const o of sel.options) {
+      if (o.value === "") continue;      // skip the "Choose…" placeholder row
+      const row = document.createElement("div");
+      row.className = "cs-opt" + (o.value === sel.value ? " sel" : "");
+      row.setAttribute("role", "option");
+      row.textContent = o.textContent;
+      row.onclick = ev => {
+        ev.preventDefault(); ev.stopPropagation();
+        if (sel.value !== o.value) { sel.value = o.value; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+        syncLabel(); close();
+      };
+      panel.appendChild(row);
+    }
+    if (!panel.children.length) panel.innerHTML = `<div class="cs-opt cs-empty">No options yet</div>`;
+    panel.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    setTimeout(() => document.addEventListener("click", onDoc, true), 0);
+  };
+  btn.onclick = e => { e.preventDefault(); e.stopPropagation(); panel.hidden ? open() : close(); };
+
+  syncLabel();
+  sel.addEventListener("change", syncLabel);
+  new MutationObserver(syncLabel).observe(sel, { childList: true }); // options repopulated → refresh label
+}
 // GTFS trip ids look like "BNSF_BN1283_V2_D"; riders know the train as "1283".
 function trainNoShort(no) { const m = String(no).match(/\d{2,5}/); return m ? m[0] : String(no); }
 function fmtDur(min) { const h = Math.floor(min / 60), m = min % 60; return h ? `${h}h ${m}m` : `${m}m`; }

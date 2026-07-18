@@ -314,6 +314,38 @@ label input, label select {
 }
 label.check { display: flex; gap: 10px; align-items: flex-start; color: var(--text); font-size: 14px; }
 label.check input { width: auto; margin-top: 3px; }
+
+/* ---- tap-friendly dropdown (replaces native <select> popups, which the
+       Tesla in-car browser won't open) ---- */
+.cs { position: relative; display: block; }
+.cs-native { display: none; }              /* native select kept as data source, hidden */
+label .cs { margin-top: 5px; }
+.cs-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 15px;
+}
+.cs-btn .cs-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-btn .cs-placeholder { color: var(--muted); }
+.cs-btn .cs-caret { color: var(--muted); flex-shrink: 0; font-size: 12px; }
+.cs-panel {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 60;
+  max-height: 300px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); padding: 4px;
+}
+.cs-opt {
+  padding: 12px; border-radius: 8px; font-size: 15px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cs-opt:hover { background: var(--bg); }
+.cs-opt.sel { background: var(--line); color: #fff; }
+.cs-opt.cs-empty { color: var(--muted); cursor: default; }
+
+/* compact variant in the sticky header (route switcher) */
+.header-row .cs { flex: 0 1 auto; min-width: 0; max-width: 320px; }
+.header-row .cs-btn { height: 36px; padding: 0 10px; font-size: 13px; font-weight: 500; }
 button.primary {
   background: var(--line); color: #fff; border: none; border-radius: 10px;
   padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
