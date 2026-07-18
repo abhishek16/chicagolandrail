@@ -65,6 +65,7 @@ async function init() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").then(r => swReg = r).catch(() => {});
   try { lines = await api("/api/lines"); } catch { lines = []; }
   api("/api/meta").then(m => { meta = m; }).catch(() => {}); // for stale-data warning
+  initOneOff();
   if (!activeRoute()) showSetup(); else showMain();
   syncPush(); // refresh push subscription + line list on load
 }
@@ -156,8 +157,17 @@ function lineLabel(l) { return `${l.id} — ${l.name}`; }
 // ============================================================
 // SETUP VIEW
 // ============================================================
-function showSetup() {
+// opts.from === "main" → the rider navigated back from the board: present this
+// page as plain "Settings" sections (no 1-2-3-4 wizard chrome) with a way back.
+// opts.scrollTo → jump to a specific section (e.g. the cog goes to preferences).
+function showSetup(opts = {}) {
   swapView("setup");
+  const fromMain = opts.from === "main";
+  $("#view-setup").classList.toggle("settings-mode", fromMain && S.routes.length > 0);
+  $("#setup-tagline").textContent = fromMain && S.routes.length
+    ? "Manage your routes, alerts, and preferences."
+    : "Your next train, live delays, and service alerts — set up once.";
+  $("#setup-done").textContent = fromMain ? "‹ Back to trains" : "View trains →";
   const sel = $("#line");
   sel.innerHTML = `<option value="">Choose a line…</option>` +
     lines.map(l => `<option value="${l.id}">${esc(lineLabel(l))}</option>`).join("");
@@ -180,40 +190,11 @@ function showSetup() {
   const st = settings();
   $("#m0").value = st.morningWindow[0]; $("#m1").value = st.morningWindow[1];
   $("#e0").value = st.eveningWindow[0]; $("#e1").value = st.eveningWindow[1];
-  ["m0", "m1", "e0", "e1"].forEach(id => $("#" + id).onchange = saveWindows); // auto-save, no button
+  $("#save-windows").onclick = () => { saveWindows(); flashOk("#win-ok"); };
   $("#notif-toggle").checked = !!S.notify;
   $("#notif-note").textContent = ("Notification" in window)
     ? "Get alerts for new delays, cancellations, and service alerts — even when the app is closed. On iPhone, first add this app to your Home Screen from Safari."
     : "This browser doesn't support notifications.";
-
-  // One-off trip picker (transient, not saved).
-  const ooSel = $("#oo-line");
-  ooSel.innerHTML = `<option value="">Choose a line…</option>` +
-    lines.map(l => `<option value="${l.id}">${esc(lineLabel(l))}</option>`).join("");
-  ooSel.onchange = async () => {
-    ooStations = [];
-    $("#oo-from").innerHTML = $("#oo-to").innerHTML = `<option value="">Choose a line first…</option>`;
-    $("#oo-error").classList.add("hidden");
-    if (!ooSel.value) return;
-    try {
-      ooStations = (await api(`/api/stops?route=${encodeURIComponent(ooSel.value)}`)).stations;
-      $("#oo-from").innerHTML = $("#oo-to").innerHTML = stationOptions(ooStations);
-    } catch {
-      $("#oo-error").textContent = "Couldn't load stations — check your connection.";
-      $("#oo-error").classList.remove("hidden");
-    }
-  };
-  $("#oo-go").onclick = () => {
-    const err = $("#oo-error"); err.classList.add("hidden");
-    const fail = m => { err.textContent = m; err.classList.remove("hidden"); };
-    const line = ooSel.value;
-    const from = ooStations.find(s => s.id === $("#oo-from").value);
-    const to = ooStations.find(s => s.id === $("#oo-to").value);
-    if (!line || !from || !to) return fail("Pick a line and both stations.");
-    if (from.id === to.id) return fail("From and to must be different.");
-    oneOff = { id: "__oneoff", line, home: from.id, homeName: from.name, work: to.id, workName: to.name, label: `${from.name} → ${to.name}` };
-    showMain();
-  };
 
   renderRouteList();
   $("#save-route").onclick = saveRoute;
@@ -238,11 +219,16 @@ function showSetup() {
 
   // Replace native <select>/<input type=time> popups with tap-friendly widgets
   // so every picker works in browsers that won't open native popups (Tesla).
-  ["#line", "#home", "#work", "#oo-line", "#oo-from", "#oo-to",
+  ["#line", "#home", "#work",
     "#rem-route", "#rem-dir", "#rem-train", "#rem-lead", "#rem-days", "#brief-route"]
     .forEach(s => enhanceSelect($(s)));
   ["#m0", "#m1", "#e0", "#e1", "#brief-time"].forEach(s => enhanceTime($(s)));
   updateGates(); // set initial locked/unlocked state (no scroll on first paint)
+  if (opts.scrollTo) {
+    const target = $(opts.scrollTo);
+    if (target) setTimeout(() =>
+      target.scrollIntoView({ behavior: REDUCE_MOTION ? "auto" : "smooth", block: "start" }), 60);
+  }
 }
 
 // ---------- departure reminders (setup UI) ----------
@@ -401,22 +387,41 @@ function renderRouteList() {
   $("#route-count").textContent = has ? `(${S.routes.length}/5)` : "";
   el.innerHTML = has ? "" : `<p class="muted small">No routes yet — pick your line and stations below, then tap <b>Save route</b>.</p>`;
   const done = $("#setup-done");
-  if (done) done.classList.toggle("hidden", !has);
+  if (done) done.classList.toggle("hidden", !(has || oneOff));
   for (const r of S.routes) {
     const div = document.createElement("div");
     div.className = "route-item" + (r.id === S.activeRouteId ? " active" : "");
-    div.innerHTML = `<div class="ri-main"><div class="name">${esc(r.label)}</div>
+    div.innerHTML = `<span class="ri-dot" style="background:${esc(lineColor(r.line))}" aria-hidden="true"></span>
+      <div class="ri-main"><div class="name">${esc(r.label)}</div>
       <div class="sub">${esc(r.line)} · ${esc(r.homeName)} ↔ ${esc(r.workName)}${r.id === S.activeRouteId ? " · active" : ""}</div></div>
       <button class="ghost danger" data-a="del">Remove</button>
       <span class="ri-go" aria-hidden="true">›</span>`;
     // Tap the route to view its trains.
     div.querySelector(".ri-main").onclick = () => { oneOff = null; S.activeRouteId = r.id; persist(); showMain(); };
     div.querySelector(".ri-go").onclick = () => { oneOff = null; S.activeRouteId = r.id; persist(); showMain(); };
-    div.querySelector('[data-a="del"]').onclick = e => {
+    const del = div.querySelector('[data-a="del"]');
+    del.onclick = e => {
       e.stopPropagation();
+      // Two-tap confirm (native confirm() dialogs don't open in the Tesla browser).
+      if (!del.classList.contains("confirm")) {
+        del.classList.add("confirm"); del.textContent = "Remove?";
+        del._t = setTimeout(() => { del.classList.remove("confirm"); del.textContent = "Remove"; }, 3500);
+        return;
+      }
+      clearTimeout(del._t);
       S.routes = S.routes.filter(x => x.id !== r.id);
+      // Cascade: reminders and the briefing tied to this route go with it.
+      S.reminders = (S.reminders || []).filter(x => x.routeId !== r.id);
+      if (S.briefing && S.briefing.routeId === r.id) S.briefing = null;
       if (S.activeRouteId === r.id) S.activeRouteId = S.routes[0]?.id || null;
       persist(); renderRouteList(); syncPush(); updateGates(); // re-lock if last route removed
+      // Rebuild the reminder/briefing UI so their route pickers drop the deleted route.
+      try { setupReminders(); } catch { /* section may be locked */ }
+      try { setupBriefing(); } catch { /* section may be locked */ }
+      if (!S.routes.length) { // last route gone → fall back to the guided wizard
+        const vs = $("#view-setup"); if (vs) vs.classList.remove("settings-mode");
+        const tag = $("#setup-tagline"); if (tag) tag.textContent = "Your next train, live delays, and service alerts — set up once.";
+      }
     };
     el.appendChild(div);
   }
@@ -457,6 +462,48 @@ function flashOk(sel) {
 }
 
 // ============================================================
+// ONE-OFF TRIP SHEET (transient lookup, reachable from both views)
+// ============================================================
+function initOneOff() {
+  const ooSel = $("#oo-line");
+  ooSel.innerHTML = `<option value="">Choose a line…</option>` +
+    lines.map(l => `<option value="${l.id}">${esc(lineLabel(l))}</option>`).join("");
+  ooSel.onchange = async () => {
+    ooStations = [];
+    $("#oo-from").innerHTML = $("#oo-to").innerHTML = `<option value="">Choose a line first…</option>`;
+    $("#oo-error").classList.add("hidden");
+    if (!ooSel.value) return;
+    try {
+      ooStations = (await api(`/api/stops?route=${encodeURIComponent(ooSel.value)}`)).stations;
+      $("#oo-from").innerHTML = $("#oo-to").innerHTML = stationOptions(ooStations);
+    } catch {
+      $("#oo-error").textContent = "Couldn't load stations — check your connection.";
+      $("#oo-error").classList.remove("hidden");
+    }
+  };
+  $("#oo-go").onclick = () => {
+    const err = $("#oo-error"); err.classList.add("hidden");
+    const fail = m => { err.textContent = m; err.classList.remove("hidden"); };
+    const line = ooSel.value;
+    const from = ooStations.find(s => s.id === $("#oo-from").value);
+    const to = ooStations.find(s => s.id === $("#oo-to").value);
+    if (!line || !from || !to) return fail("Pick a line and both stations.");
+    if (from.id === to.id) return fail("From and to must be different.");
+    oneOff = { id: "__oneoff", line, home: from.id, homeName: from.name, work: to.id, workName: to.name, label: `${from.name} → ${to.name}` };
+    closeOneOff();
+    showMain();
+  };
+  ["#oo-line", "#oo-from", "#oo-to"].forEach(s => enhanceSelect($(s)));
+  $("#oneoff-btn").onclick = openOneOff;
+  $("#oo-open-setup").onclick = openOneOff;
+  $("#oo-close").onclick = closeOneOff;
+  $("#oo-modal").onclick = e => { if (e.target === $("#oo-modal")) closeOneOff(); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeOneOff(); });
+}
+function openOneOff() { $("#oo-error").classList.add("hidden"); $("#oo-modal").classList.remove("hidden"); }
+function closeOneOff() { $("#oo-modal").classList.add("hidden"); }
+
+// ============================================================
 // MAIN VIEW
 // ============================================================
 function showMain() {
@@ -472,7 +519,9 @@ function showMain() {
     S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; showMain();
   };
   enhanceSelect($("#route-picker")); // tap-friendly dropdown (Tesla browser)
-  $("#settings-btn").onclick = () => { stopPolling(); showSetup(); };
+  // Back = manage routes (top of settings); cog = preferences (direction windows etc).
+  $("#back-btn").onclick = () => { stopPolling(); showSetup({ from: "main" }); };
+  $("#settings-btn").onclick = () => { stopPolling(); showSetup({ from: "main", scrollTo: "#sec-windows" }); };
   renderSocial(route);
   loadCache(); // hydrate last-good board so an offline open shows something
   startPolling();

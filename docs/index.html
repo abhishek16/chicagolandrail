@@ -18,9 +18,17 @@
       <header>
         <div id="line-accent"></div>
         <div class="header-row">
+          <button id="back-btn" class="icon-btn" title="Routes &amp; settings" aria-label="Manage routes and settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
+          </button>
           <select id="route-picker" aria-label="Switch route"></select>
           <div class="header-actions">
-            <button id="settings-btn" title="Settings">&#9881;</button>
+            <button id="oneoff-btn" class="icon-btn" title="One-off trip" aria-label="Plan a one-off trip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="5.5" r="2.3"/><circle cx="17.5" cy="18.5" r="2.3"/><path d="M6.5 8v6a4 4 0 0 0 4 4h4.4"/></svg>
+            </button>
+            <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.62.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.05 7.05 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.65 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.62-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.23.4.32.61.22l2.39-.96c.49.38 1.03.7 1.62.94l.36 2.54c.05.24.25.42.5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.21.1.48.01.61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
+            </button>
           </div>
         </div>
         <h1 id="route-title"></h1>
@@ -52,7 +60,7 @@
         <div id="line-accent-2"></div>
         <div class="setup-top"><button id="setup-done" class="ghost hidden">View trains &rarr;</button></div>
         <div class="brand"><img src="icons/icon32.png" alt="" class="brand-mark" width="28" height="28"><h1>Chicagoland Rail</h1></div>
-        <p class="muted">Your next train, live delays, and service alerts — set up once.</p>
+        <p id="setup-tagline" class="muted">Your next train, live delays, and service alerts — set up once.</p>
       </header>
       <main>
         <ol class="steps">
@@ -140,32 +148,46 @@
                 <label>Evening starts <input id="e0" type="time"></label>
                 <label>Evening ends <input id="e1" type="time"></label>
               </div>
+              <button id="save-windows" class="primary">Save times</button>
+              <p id="win-ok" class="ok small hidden">Times saved</p>
             </div>
           </section>
 
           <section>
             <h2>One-off trip <span class="tag">Utility</span></h2>
             <p class="muted small">See any two stations — a game, a visit — without saving a route.</p>
-            <div class="card">
-              <label>Line <select id="oo-line"><option value="">Choose a line…</option></select></label>
-              <label>From
-                <select id="oo-from"><option value="">Choose a line first…</option></select>
-              </label>
-              <label>To
-                <select id="oo-to"><option value="">Choose a line first…</option></select>
-              </label>
-              <button id="oo-go" class="primary">View trip</button>
-              <p id="oo-error" class="error hidden"></p>
-            </div>
+            <button id="oo-open-setup" class="ghost wide">Plan a one-off trip</button>
           </section>
         </div>
 
-        <p class="muted small save-note">Every change is saved automatically. Tap a saved route above, or <b>View&nbsp;trains</b>, to see departures.</p>
+        <p class="muted small save-note">Notification, reminder, and briefing changes save automatically.</p>
         <footer class="site-foot">
           <p class="built-by">Built by <a href="mailto:resoluteacc@gmail.com">resoluteacc@gmail.com</a></p>
           <p class="disclaimer">Not affiliated with or endorsed by Metra. Schedule and service data provided by Metra.</p>
         </footer>
       </main>
+    </div>
+
+    <!-- ============ ONE-OFF TRIP SHEET (shared by both views) ============ -->
+    <div id="oo-modal" class="sheet-backdrop hidden">
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="oo-title">
+        <div class="sheet-head">
+          <h2 id="oo-title">One-off trip</h2>
+          <button id="oo-close" class="icon-btn" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <p class="muted small">See any two stations — a game, a visit — without saving a route.</p>
+        <label>Line <select id="oo-line"><option value="">Choose a line…</option></select></label>
+        <label>From
+          <select id="oo-from"><option value="">Choose a line first…</option></select>
+        </label>
+        <label>To
+          <select id="oo-to"><option value="">Choose a line first…</option></select>
+        </label>
+        <button id="oo-go" class="primary">View trip</button>
+        <p id="oo-error" class="error hidden"></p>
+      </div>
     </div>
 
   </div>
