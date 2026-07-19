@@ -524,6 +524,8 @@ button.ghost.wide.danger.confirm { background: var(--red); border-color: var(--r
 .feat label.check { margin: 10px 0 0; font-size: 13px; }
 .feat .feat-cfg { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .feat .feat-cfg label { margin-bottom: 10px; }
+.sched-hint { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.sched-hint:empty { display: none; }
 .center-note { grid-column: 1 / -1; text-align: center; margin-top: 4px; }
 .feat-actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 6px; }
 .feat-actions .primary { flex: 1; }

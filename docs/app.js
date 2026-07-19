@@ -234,8 +234,10 @@ function setupReminders() {
     if (!r) { trainSel.innerHTML = `<option value="">Save a route first…</option>`; return; }
     const [from, to] = $("#rem-dir").value === "HW" ? [r.home, r.work] : [r.work, r.home];
     trainSel.innerHTML = `<option value="">Loading…</option>`;
+    const sched = remSchedFor($("#rem-days").value);
+    const hint = $("#rem-sched"); if (hint) hint.textContent = sched.label;
     try {
-      const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=today`);
+      const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${sched.date}`);
       remTrains = (data.trains || []).filter(t => t.depSec != null);
       trainSel.innerHTML = remTrains.length
         ? remTrains.map(t => `<option value="${t.depSec}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
@@ -244,6 +246,7 @@ function setupReminders() {
   };
   routeSel.onchange = loadTrains;
   $("#rem-dir").onchange = loadTrains;
+  $("#rem-days").onchange = loadTrains; // weekday vs every-day lists different schedules
   if (hasRoutes) loadTrains();
 
   $("#rem-add").onclick = () => {
@@ -584,7 +587,7 @@ function renderWizardFeatures() {
           <option value="HW">To ${esc(r.workName)}</option>
           <option value="WH">To ${esc(r.homeName)}</option>
         </select></label>
-        <label>Train <select id="wf-rem-train"><option value="">Loading trains…</option></select></label>
+        <label>Train <select id="wf-rem-train"><option value="">Loading trains…</option></select><span id="wf-rem-sched" class="sched-hint"></span></label>
         <div class="grid2">
           <label>Notify before <select id="wf-rem-lead"><option value="10">10 min</option><option value="15" selected>15 min</option><option value="20">20 min</option><option value="30">30 min</option></select></label>
           <label>Days <select id="wf-rem-days"><option value="wd">Weekdays</option><option value="all">Every day</option></select></label>
@@ -607,8 +610,10 @@ function renderWizardFeatures() {
     wfTrains = [];
     sel.innerHTML = `<option value="">Loading trains…</option>`;
     const [from, to] = $("#wf-rem-dir").value === "HW" ? [r.home, r.work] : [r.work, r.home];
+    const sched = remSchedFor($("#wf-rem-days").value);
+    $("#wf-rem-sched").textContent = sched.label;
     try {
-      const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=today`);
+      const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${sched.date}`);
       wfTrains = (data.trains || []).filter(t => t.depSec != null);
       sel.innerHTML = wfTrains.length
         ? wfTrains.map(t => `<option value="${t.depSec}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
@@ -620,6 +625,7 @@ function renderWizardFeatures() {
     if (e.target.checked && !wfTrains.length) loadTrains();
   };
   $("#wf-rem-dir").onchange = loadTrains;
+  $("#wf-rem-days").onchange = loadTrains; // weekday vs every-day lists different schedules
   $("#wf-brief").onchange = e => $("#wf-brief-cfg").classList.toggle("hidden", !e.target.checked);
   ["#wf-rem-dir", "#wf-rem-train", "#wf-rem-lead", "#wf-rem-days"].forEach(s => enhanceSelect($(s)));
   enhanceTime($("#wf-brief-time"));
@@ -983,6 +989,19 @@ async function renderTimetable(dirs, seq = reqSeq) {
 // ---------- date helpers (local time; riders are in Chicago) ----------
 function fmtISO(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+// Which schedule a reminder's train picker should list. A "Weekdays" reminder
+// must offer weekday trains even when it's being set up on a weekend (today's
+// timetable would miss every weekday train), so roll forward to the next
+// weekday. "Every day" lists today's schedule.
+function remSchedFor(daysVal) {
+  let d = new Date();
+  if (daysVal === "wd") while (d.getDay() === 0 || d.getDay() === 6) d = addDays(d, 1);
+  const wd = d.getDay();
+  return {
+    date: fmtISO(d).replace(/-/g, ""),
+    label: wd === 0 ? "Sunday schedule" : wd === 6 ? "Saturday schedule" : "Weekday schedule",
+  };
+}
 function todayISO() { return fmtISO(new Date()); }
 function isoPlus(n) { return fmtISO(addDays(new Date(), n)); }
 function quickDays() {
