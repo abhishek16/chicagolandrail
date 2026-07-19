@@ -11,10 +11,10 @@ const store = {
   },
   save(s) { localStorage.setItem("mct", JSON.stringify(s)); },
 };
-let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null }, store.load());
+let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0 }, store.load());
 const persist = () => store.save(S);
 
-let lines = [], stations = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
+let lines = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
 // Monotonic token for the active board request. Every refresh/timetable render
 // captures the current value; after each await it bails if a newer request has
 // started (e.g. the rider switched routes), so a slow response from the previous
@@ -63,10 +63,11 @@ init();
 async function init() {
   initAnalytics();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").then(r => swReg = r).catch(() => {});
+  S.visits = (S.visits || 0) + 1; persist(); // paces the contextual briefing nudge
   try { lines = await api("/api/lines"); } catch { lines = []; }
   api("/api/meta").then(m => { meta = m; }).catch(() => {}); // for stale-data warning
   initOneOff();
-  if (!activeRoute()) showSetup(); else showMain();
+  if (!activeRoute()) showWizard("boot"); else showMain();
   syncPush(); // refresh push subscription + line list on load
 }
 
@@ -157,36 +158,11 @@ function lineLabel(l) { return `${l.id} — ${l.name}`; }
 // ============================================================
 // SETUP VIEW
 // ============================================================
-// opts.from === "main" → the rider navigated back from the board: present this
-// page as plain "Settings" sections (no 1-2-3-4 wizard chrome) with a way back.
+// Settings page (routes, alerts, preferences). Route creation happens in the
+// wizard — this page only lists, activates, and removes saved routes.
 // opts.scrollTo → jump to a specific section (e.g. the cog goes to preferences).
 function showSetup(opts = {}) {
   swapView("setup");
-  const fromMain = opts.from === "main";
-  $("#view-setup").classList.toggle("settings-mode", fromMain && S.routes.length > 0);
-  $("#setup-tagline").textContent = fromMain && S.routes.length
-    ? "Manage your routes, alerts, and preferences."
-    : "Your next train, live delays, and service alerts — set up once.";
-  $("#setup-done").textContent = fromMain ? "‹ Back to trains" : "View trains →";
-  const sel = $("#line");
-  sel.innerHTML = `<option value="">Choose a line…</option>` +
-    lines.map(l => `<option value="${l.id}">${esc(lineLabel(l))}</option>`).join("");
-  if (!lines.length) $("#form-error").textContent = "Could not load lines — is the ingest done and KV bound?", $("#form-error").classList.remove("hidden");
-
-  sel.onchange = async () => {
-    stations = [];
-    $("#home").innerHTML = $("#work").innerHTML = `<option value="">Choose a line first…</option>`;
-    $("#form-error").classList.add("hidden");
-    if (!sel.value) return;
-    try {
-      stations = (await api(`/api/stops?route=${encodeURIComponent(sel.value)}`)).stations;
-      $("#home").innerHTML = $("#work").innerHTML = stationOptions(stations);
-    } catch {
-      $("#form-error").textContent = "Couldn't load stations for that line — check your connection and try again.";
-      $("#form-error").classList.remove("hidden");
-    }
-  };
-
   const st = settings();
   $("#m0").value = st.morningWindow[0]; $("#m1").value = st.morningWindow[1];
   $("#e0").value = st.eveningWindow[0]; $("#e1").value = st.eveningWindow[1];
@@ -197,7 +173,7 @@ function showSetup(opts = {}) {
     : "This browser doesn't support notifications.";
 
   renderRouteList();
-  $("#save-route").onclick = saveRoute;
+  $("#add-route").onclick = () => showWizard("settings");
   $("#setup-done").onclick = () => { if (activeRoute()) showMain(); };
   $("#notif-toggle").onchange = async e => {
     if (e.target.checked) {
@@ -219,8 +195,7 @@ function showSetup(opts = {}) {
 
   // Replace native <select>/<input type=time> popups with tap-friendly widgets
   // so every picker works in browsers that won't open native popups (Tesla).
-  ["#line", "#home", "#work",
-    "#rem-route", "#rem-dir", "#rem-train", "#rem-lead", "#rem-days", "#brief-route"]
+  ["#rem-route", "#rem-dir", "#rem-train", "#rem-lead", "#rem-days", "#brief-route"]
     .forEach(s => enhanceSelect($(s)));
   ["#m0", "#m1", "#e0", "#e1", "#brief-time"].forEach(s => enhanceTime($(s)));
   updateGates(); // set initial locked/unlocked state (no scroll on first paint)
@@ -345,32 +320,6 @@ function stationOptions(sts) {
   return `<option value="">Choose a station…</option>` +
     sts.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
 }
-function stationById(id) { return stations.find(s => s.id === id) || null; }
-
-// Returns true if a route was saved, false (with an inline error) if not.
-function saveRoute() {
-  const err = $("#form-error"); err.classList.add("hidden");
-  const line = $("#line").value, home = stationById($("#home").value), work = stationById($("#work").value);
-  const fail = m => { err.textContent = m; err.classList.remove("hidden"); return false; };
-  if (!line || !home || !work) return fail("Pick a line and valid home & work stations.");
-  if (home.id === work.id) return fail("Home and work stations must be different.");
-  if (S.routes.length >= 5) return fail("Route limit reached (5). Remove one first.");
-  const r = {
-    id: "r" + Date.now(), line,
-    home: home.id, homeName: home.name,
-    work: work.id, workName: work.name,
-    label: $("#label").value.trim() || `${home.name} ↔ ${work.name}`,
-  };
-  S.routes.push(r);
-  S.activeRouteId = r.id; // the route you just added becomes the one you view
-  persist();
-  $("#label").value = "";
-  syncPush();
-  renderRouteList();
-  flashOk("#route-ok");
-  updateGates({ scroll: true }); // continue the guided flow → unlock & scroll to the next step
-  return true;
-}
 
 function saveWindows() {
   S.settings = {
@@ -385,9 +334,11 @@ function renderRouteList() {
   const el = $("#route-list");
   const has = S.routes.length;
   $("#route-count").textContent = has ? `(${S.routes.length}/5)` : "";
-  el.innerHTML = has ? "" : `<p class="muted small">No routes yet — pick your line and stations below, then tap <b>Save route</b>.</p>`;
+  el.innerHTML = has ? "" : `<p class="muted small">No routes yet — tap <b>Add a route</b> below.</p>`;
   const done = $("#setup-done");
   if (done) done.classList.toggle("hidden", !(has || oneOff));
+  const add = $("#add-route");
+  if (add) add.classList.toggle("hidden", S.routes.length >= 5); // route cap
   for (const r of S.routes) {
     const div = document.createElement("div");
     div.className = "route-item" + (r.id === S.activeRouteId ? " active" : "");
@@ -418,24 +369,16 @@ function renderRouteList() {
       // Rebuild the reminder/briefing UI so their route pickers drop the deleted route.
       try { setupReminders(); } catch { /* section may be locked */ }
       try { setupBriefing(); } catch { /* section may be locked */ }
-      if (!S.routes.length) { // last route gone → fall back to the guided wizard
-        const vs = $("#view-setup"); if (vs) vs.classList.remove("settings-mode");
-        const tag = $("#setup-tagline"); if (tag) tag.textContent = "Your next train, live delays, and service alerts — set up once.";
-      }
     };
     el.appendChild(div);
   }
 }
 
-// Progressive setup: downstream sections stay locked until their prerequisite is
-// met (a saved route, then notifications on), then unlock with a smooth scroll +
-// highlight so the whole page reads as one guided flow.
+// Settings sections stay locked until their prerequisite is met (a saved route,
+// then notifications on); newly-met prerequisites unlock with a scroll + highlight.
 function updateGates({ scroll = false } = {}) {
   const hasRoute = S.routes.length > 0;
   const notif = !!S.notify;
-  // completed-step checkmarks
-  const rs = $("#sec-routes"); if (rs) rs.classList.toggle("done", hasRoute);
-  const ns = $("#sec-notif"); if (ns) ns.classList.toggle("done", notif);
   const gates = [
     ["#sec-notif", hasRoute],
     ["#sec-reminders", hasRoute && notif],
@@ -459,6 +402,126 @@ function flashOk(sel) {
   const el = $(sel); if (!el) return;
   el.classList.remove("hidden");
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.add("hidden"), 2500);
+}
+
+// ============================================================
+// ONBOARDING WIZARD — three full-screen questions to a live board
+// (line → boarding station → destination; no dropdowns anywhere)
+// ============================================================
+let wiz = null; // { step, cameFrom: "boot"|"settings", line, sts, from, loading }
+
+function showWizard(cameFrom = "boot") {
+  wiz = { step: 1, cameFrom, sts: [] };
+  swapView("wizard");
+  document.documentElement.style.setProperty("--line", "#005A45");
+  renderWizard();
+}
+
+function wizBack() {
+  if (wiz.step === 3) { wiz.from = null; wiz.step = 2; return renderWizard(); }
+  if (wiz.step === 2) {
+    wiz.line = null; wiz.step = 1;
+    document.documentElement.style.setProperty("--line", "#005A45");
+    return renderWizard();
+  }
+  // step 1 → leave the wizard if there's somewhere to go back to
+  if (wiz.cameFrom === "settings") return showSetup();
+  if (activeRoute()) return showMain();
+}
+
+function renderWizard() {
+  $("#wiz-dots").innerHTML = [1, 2, 3]
+    .map(i => `<span class="${i <= wiz.step ? "on" : ""}"></span>`).join("");
+  // step 1 on true first-run has nowhere to go back to — keep layout, hide button
+  const canBack = wiz.step > 1 || wiz.cameFrom === "settings" || !!activeRoute();
+  $("#wiz-back").classList.toggle("invisible", !canBack);
+  $("#wiz-back").onclick = wizBack;
+  const filter = $("#wiz-filter");
+  filter.value = "";
+  filter.oninput = renderWizardList;
+  filter.classList.toggle("hidden", wiz.step === 1); // 11 lines need no filter
+  if (wiz.step === 1) {
+    $("#wiz-title").textContent = "Which line do you ride?";
+    $("#wiz-sub").textContent = "Pick your Metra line — you can add more routes later.";
+  } else if (wiz.step === 2) {
+    $("#wiz-title").textContent = "Where do you board?";
+    $("#wiz-sub").textContent = `${wiz.line} · your home station.`;
+  } else {
+    $("#wiz-title").textContent = "Where do you get off?";
+    $("#wiz-sub").textContent = `${wiz.line} · from ${wiz.from.name}.`;
+  }
+  renderWizardList();
+}
+
+function renderWizardList() {
+  const list = $("#wiz-list");
+  const q = $("#wiz-filter").value.trim().toLowerCase();
+  if (wiz.step === 1) {
+    if (!lines.length) {
+      list.innerHTML = `<div class="muted center">Couldn't load lines — check your connection.<br><br><button class="ghost" id="wiz-retry">Try again</button></div>`;
+      $("#wiz-retry").onclick = async () => {
+        try { lines = await api("/api/lines"); } catch { /* stays empty */ }
+        renderWizardList();
+      };
+      return;
+    }
+    list.innerHTML = lines.map(l => `
+      <button class="wiz-row" data-id="${esc(l.id)}">
+        <span class="wiz-bar" style="background:${esc(l.color)}"></span>
+        <span class="wiz-txt"><span class="t">${esc(l.id)}</span><span class="s">${esc(l.name)}</span></span>
+        <span class="wiz-go" aria-hidden="true">›</span>
+      </button>`).join("");
+    list.querySelectorAll(".wiz-row").forEach(b => b.onclick = () => pickWizLine(b.dataset.id));
+    return;
+  }
+  if (wiz.loading) { list.innerHTML = `<div class="muted center">Loading stations…</div>`; return; }
+  if (!wiz.sts.length) {
+    list.innerHTML = `<div class="muted center">Couldn't load stations — check your connection.<br><br><button class="ghost" id="wiz-retry">Try again</button></div>`;
+    $("#wiz-retry").onclick = () => pickWizLine(wiz.line);
+    return;
+  }
+  const sts = wiz.sts.filter(s =>
+    (wiz.step === 2 || s.id !== wiz.from.id) && (!q || s.name.toLowerCase().includes(q)));
+  list.innerHTML = sts.map(s => `
+    <button class="wiz-row" data-id="${esc(s.id)}">
+      <span class="wiz-txt"><span class="t">${esc(s.name)}</span></span>
+      <span class="wiz-go" aria-hidden="true">›</span>
+    </button>`).join("") || `<div class="muted center">No stations match.</div>`;
+  list.querySelectorAll(".wiz-row").forEach(b => b.onclick = () => pickWizStation(b.dataset.id));
+}
+
+async function pickWizLine(id) {
+  const l = lines.find(x => x.id === id);
+  wiz.line = id;
+  wiz.step = 2;
+  wiz.loading = true;
+  if (l) document.documentElement.style.setProperty("--line", l.color); // theme floods to the line
+  renderWizard();
+  try { wiz.sts = (await api(`/api/stops?route=${encodeURIComponent(id)}`)).stations; }
+  catch { wiz.sts = []; }
+  wiz.loading = false;
+  if (wiz && wiz.step === 2 && wiz.line === id) renderWizardList(); // still on this step
+}
+
+function pickWizStation(id) {
+  const s = wiz.sts.find(x => x.id === id);
+  if (!s) return;
+  if (wiz.step === 2) { wiz.from = s; wiz.step = 3; renderWizard(); return; }
+  if (S.routes.length >= 5) {
+    $("#wiz-sub").textContent = "Route limit reached (5) — remove one in Settings first.";
+    return;
+  }
+  const r = {
+    id: "r" + Date.now(), line: wiz.line,
+    home: wiz.from.id, homeName: wiz.from.name,
+    work: s.id, workName: s.name,
+    label: `${wiz.from.name} ↔ ${s.name}`,
+  };
+  S.routes.push(r);
+  S.activeRouteId = r.id;
+  persist(); syncPush();
+  wiz = null;
+  showMain(); // straight to the live board — the payoff
 }
 
 // ============================================================
@@ -520,8 +583,8 @@ function showMain() {
   };
   enhanceSelect($("#route-picker")); // tap-friendly dropdown (Tesla browser)
   // Back = manage routes (top of settings); cog = preferences (direction windows etc).
-  $("#back-btn").onclick = () => { stopPolling(); showSetup({ from: "main" }); };
-  $("#settings-btn").onclick = () => { stopPolling(); showSetup({ from: "main", scrollTo: "#sec-windows" }); };
+  $("#back-btn").onclick = () => { stopPolling(); showSetup(); };
+  $("#settings-btn").onclick = () => { stopPolling(); showSetup({ scrollTo: "#sec-windows" }); };
   renderSocial(route);
   loadCache(); // hydrate last-good board so an offline open shows something
   startPolling();
@@ -613,7 +676,7 @@ function onVisible() { if (!document.hidden) refresh(); }
 
 async function refresh() {
   const route = activeRoute();
-  if (!route) return showSetup();
+  if (!route) return showWizard("boot");
 
   const seq = ++reqSeq; // this refresh's token; a route switch bumps it and voids us
   const modified = Object.values(lastData).some(d => d && d.serviceNote);
@@ -689,6 +752,7 @@ function render(dirs, offline) {
   });
 
   dirs.forEach(loadWeather); // fill the weather line under each hero (async, optional)
+  renderNudge();             // contextual feature discovery (alerts, briefing)
 
   const anyAlert = seen.size > 0;
   const cancelledNext = dirs.some(d => lastData[d]?.trains?.[0]?.cancelled);
@@ -913,6 +977,52 @@ function stopsPanel(data, train, d) {
     <div class="stops-panel${expandedStops[d] ? " open" : ""}"><div class="stops-inner">${rows}</div></div>`;
 }
 
+// ---------- contextual feature discovery (one card at a time, never nagging) ----------
+// Onboarding asks nothing beyond the route; power features are offered here, in
+// context, after the rider has seen value. Each card is one-shot: any answer
+// (including "Not now") is remembered and the card never returns.
+function renderNudge() {
+  const el = $("#nudge"); if (!el) return;
+  el.innerHTML = "";
+  if (oneOff) return; // a transient trip is not the moment to configure alerts
+  const n = S.nudges || (S.nudges = {});
+
+  // 1) Delay alerts — offered on the first board view.
+  if (!S.notify && "Notification" in window && !n.notif) {
+    el.innerHTML = `
+      <div class="nudge">
+        <div class="nudge-txt"><b>Never miss a delay</b>
+        <span>Get alerts for delays and cancellations on your line — even when the app is closed.</span></div>
+        <div class="nudge-btns"><button class="primary" id="nudge-yes">Enable alerts</button>
+        <button class="ghost" id="nudge-no">Not now</button></div>
+      </div>`;
+    $("#nudge-yes").onclick = async () => {
+      const p = await Notification.requestPermission();
+      if (p === "granted") { S.notify = true; n.notif = "on"; persist(); subscribePush(); }
+      else { n.notif = "denied"; persist(); }
+      renderNudge();
+    };
+    $("#nudge-no").onclick = () => { n.notif = "dismissed"; persist(); renderNudge(); };
+    return;
+  }
+
+  // 2) Morning briefing — offered once alerts are on and the app has proven itself.
+  if (S.notify && !S.briefing && !n.brief && (S.visits || 0) >= 3) {
+    el.innerHTML = `
+      <div class="nudge">
+        <div class="nudge-txt"><b>Start the day ahead of your train</b>
+        <span>A morning briefing with your first departures and any alerts, before you leave.</span></div>
+        <div class="nudge-btns"><button class="primary" id="nudge-yes">Set it up</button>
+        <button class="ghost" id="nudge-no">No thanks</button></div>
+      </div>`;
+    $("#nudge-yes").onclick = () => {
+      n.brief = "seen"; persist();
+      stopPolling(); showSetup({ scrollTo: "#sec-briefing" });
+    };
+    $("#nudge-no").onclick = () => { n.brief = "dismissed"; persist(); renderNudge(); };
+  }
+}
+
 // ---------- weather at departure ----------
 async function loadWeather(d) {
   const data = lastData[d];
@@ -1041,6 +1151,7 @@ function updateCountdowns() {
 function swapView(name) {
   $("#view-main").classList.toggle("hidden", name !== "main");
   $("#view-setup").classList.toggle("hidden", name !== "setup");
+  $("#view-wizard").classList.toggle("hidden", name !== "wizard");
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 

@@ -43,7 +43,8 @@ body {
 .error { color: var(--red); font-size: 13px; margin-top: 8px; }
 
 /* ---- header ---- */
-#line-accent, #line-accent-2 { height: 4px; background: var(--line); }
+#line-accent, #line-accent-2, #line-accent-3 { height: 4px; background: var(--line); }
+.invisible { visibility: hidden !important; }
 header {
   background: var(--surface); border-bottom: 1px solid var(--border); padding-bottom: 12px;
   position: sticky; top: 0; z-index: 20;
@@ -302,9 +303,9 @@ footer {
 }
 
 /* ---- setup view ---- */
-/* The setup/settings page is a form — it scrolls freely (no sticky chrome). */
+/* The settings page is a form — it scrolls freely (no sticky chrome). */
 .setup-header { padding-bottom: 16px; position: static; }
-.step, .prefs section { scroll-margin-top: 12px; }
+.sec, .prefs section { scroll-margin-top: 12px; }
 .setup-header h1 { padding-top: 14px; }
 .setup-header p { padding: 4px 16px 0; }
 #view-setup main { padding: 20px 16px; flex: 1; }
@@ -319,29 +320,11 @@ footer {
 .brand-mark { border-radius: 7px; box-shadow: var(--shadow-sm); }
 .brand h1 { padding: 0; }
 
-/* ---- numbered setup stepper ---- */
-.steps { list-style: none; padding: 0; margin: 0; }
-.step { display: flex; gap: 14px; padding-bottom: 26px; position: relative; }
-.step:not(:last-child)::before {
-  content: ""; position: absolute; left: 15px; top: 36px; bottom: 2px; width: 2px;
-  background: var(--border); transition: background 0.3s;
-}
-.step.done:not(:last-child)::before { background: var(--line); }
-.step-num {
-  flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; z-index: 1;
-  background: var(--line); color: #fff; font-size: 14px; font-weight: 650;
-  box-shadow: var(--shadow-sm); transition: background 0.3s;
-}
-.step.locked .step-num { background: var(--border); color: var(--muted); box-shadow: none; }
-.step.done .step-num { font-size: 0; }
-.step.done .step-num::after {
-  content: ""; display: block; width: 15px; height: 15px; background: #fff;
-  -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z"/></svg>') center/contain no-repeat;
-  mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.42z"/></svg>') center/contain no-repeat;
-}
-.step-body { flex: 1; min-width: 0; padding-top: 4px; }
-.step-body > * { transition: opacity 0.35s ease; }
+/* ---- settings sections ---- */
+.sec { margin-bottom: 28px; }
+.sec > .muted, .prefs section > .muted { margin-bottom: 12px; }
+.sec > * { transition: opacity 0.35s ease; }
+#add-route { margin-top: 2px; }
 
 /* ---- preferences group (ungated) ---- */
 .prefs { margin-top: 4px; padding-top: 22px; border-top: 1px solid var(--border); }
@@ -435,14 +418,15 @@ button.ghost.wide:hover { border-color: var(--line); }
 .setup-top { display: flex; justify-content: flex-end; padding: 10px 16px 0; }
 #setup-done { font-weight: 600; }
 
-/* ---- progressive setup gating ---- */
-.step.locked { pointer-events: none; }
-.step.locked .step-body > *:not(.lock-hint) { opacity: 0.45; }
+/* ---- settings gating (reminders/briefing need a route + notifications) ---- */
+.sec.locked { pointer-events: none; }
+.sec.locked > *:not(.lock-hint):not(h2) { opacity: 0.45; }
+.sec.locked > h2 { opacity: 0.7; }
 .lock-hint {
   display: none; color: var(--muted); margin: 0 0 12px;
   padding-left: 10px; border-left: 2px solid var(--border);
 }
-.step.locked .lock-hint { display: block; }
+.sec.locked .lock-hint { display: block; }
 .ok { display: flex; align-items: center; gap: 6px; color: var(--green); font-weight: 600; margin-top: 10px; }
 .ok::before {
   content: ""; width: 15px; height: 15px; flex-shrink: 0; background: var(--green);
@@ -455,7 +439,7 @@ button.ghost.wide:hover { border-color: var(--line); }
   100% { box-shadow: var(--shadow-sm); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .step-body > *, .just-unlocked .card, .step-num, .step::before { transition: none; animation: none; }
+  .sec > *, .just-unlocked .card { transition: none; animation: none; }
 }
 
 /* live indicator dot on the Live view tab */
@@ -466,11 +450,52 @@ button.ghost.wide:hover { border-color: var(--line); }
 }
 .seg button.on .tab-live { background: #fff; }
 
-/* Returning riders (opened from the board) see plain settings sections,
-   not the 1-2-3-4 onboarding wizard chrome. */
-.settings-mode .step-num, .settings-mode .step::before { display: none; }
-.settings-mode .step { gap: 0; padding-bottom: 24px; }
-.settings-mode .step-body { padding-top: 0; }
+/* ---- onboarding wizard (three full-screen questions) ---- */
+.wiz-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0; }
+.wiz-spacer { width: 36px; }
+.wiz-dots { display: flex; gap: 7px; }
+.wiz-dots span {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border); transition: background 0.25s;
+}
+.wiz-dots span.on { background: var(--line); }
+.wiz-header h1 { padding: 16px 16px 0; font-size: 23px; letter-spacing: -0.02em; }
+.wiz-header p { padding: 4px 16px 0; font-size: 14px; }
+#wiz-body { flex: 1; padding-bottom: 24px; }
+#wiz-filter {
+  display: block; width: calc(100% - 32px); margin: 12px 16px 0; padding: 10px 12px;
+  font-size: 15px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.wiz-list { padding: 12px 16px 0; }
+.wiz-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: var(--surface); color: var(--text); font: inherit;
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm);
+  padding: 12px 14px; margin-bottom: 8px; min-height: 54px; cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.wiz-row:hover { border-color: var(--line); }
+.wiz-row:active { transform: scale(0.985); }
+.wiz-bar { width: 6px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
+.wiz-txt { display: flex; flex-direction: column; min-width: 0; }
+.wiz-row .t { font-weight: 600; font-size: 15px; }
+.wiz-row .s { font-size: 12px; color: var(--muted); }
+.wiz-go { margin-left: auto; color: var(--muted); font-size: 20px; line-height: 1; }
+@media (prefers-reduced-motion: reduce) { .wiz-row:active { transform: none; } }
+
+/* ---- contextual nudge cards (feature discovery on the board) ---- */
+#nudge:not(:empty) { padding: 12px 16px 0; }
+.nudge {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px; box-shadow: var(--shadow-sm);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.nudge b { font-size: 14px; }
+.nudge-txt span { display: block; font-size: 13px; color: var(--muted); margin-top: 3px; }
+.nudge-btns { display: flex; gap: 8px; }
+.nudge-btns .primary { padding: 9px 16px; font-size: 13px; }
+.nudge-btns .ghost { padding: 9px 14px; font-size: 13px; }
 
 /* ---- one-off trip sheet ---- */
 .sheet-backdrop {
