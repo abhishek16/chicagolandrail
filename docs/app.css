@@ -68,6 +68,17 @@ header {
 h1 { padding: 10px 16px 0; font-size: 20px; font-weight: 680; letter-spacing: -0.02em; }
 h1 .arrow { color: var(--line); }
 
+/* which line this board belongs to — visible on both Live and Schedule */
+#line-pill { padding: 8px 16px 0; }
+.line-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 11px; max-width: 100%;
+}
+.line-pill .lp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.line-pill .lp-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---- segmented controls ---- */
 .controls { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 2px; }
 .seg {
@@ -381,9 +392,15 @@ label .cs { margin-top: 5px; }
 .cs-time .cs { flex: 1 1 0; min-width: 0; margin-top: 0; }
 .cs-time-colon { color: var(--muted); font-weight: 700; }
 
-/* schedule date dropdown sits at the right end of the date bar */
+/* schedule date dropdown sits at the right end of the date bar; its panel
+   sizes to the labels (not the narrow button) and anchors right so dates
+   like "Wed, Jul 22" never get cut off */
 .datebar .cs { margin-left: auto; flex: 0 0 auto; }
 .datebar .cs-btn { width: auto; padding: 6px 12px; font-size: 13px; }
+.datebar .cs .cs-panel {
+  left: auto; right: 0; width: max-content; min-width: 100%;
+  max-width: min(300px, calc(100vw - 32px));
+}
 button.primary {
   background: var(--line); color: #fff; border: none; border-radius: 10px;
   padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
@@ -501,8 +518,13 @@ button.ghost.wide.danger.confirm { background: var(--red); border-color: var(--r
   padding: 14px; box-shadow: var(--shadow-sm);
 }
 .feat svg { flex-shrink: 0; width: 22px; height: 22px; color: var(--line); margin-top: 1px; }
+.feat > div { flex: 1; min-width: 0; }
 .feat b { display: block; font-size: 14px; }
-.feat span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.feat > div > span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.feat label.check { margin: 10px 0 0; font-size: 13px; }
+.feat .feat-cfg { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.feat .feat-cfg label { margin-bottom: 10px; }
+.center-note { grid-column: 1 / -1; text-align: center; margin-top: 4px; }
 .feat-actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 6px; }
 .feat-actions .primary { flex: 1; }
 

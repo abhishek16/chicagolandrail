@@ -32,6 +32,7 @@
           </div>
         </div>
         <h1 id="route-title"></h1>
+        <div id="line-pill"></div>
         <div class="controls">
           <div id="view-tabs" class="seg" role="tablist" aria-label="View"></div>
           <div id="dir-tabs" class="seg" role="tablist" aria-label="Direction"></div>
@@ -74,7 +75,7 @@
           <h2>Notifications</h2>
           <p class="lock-hint small">Add a route above to set these up.</p>
           <div class="card">
-            <label class="check"><input type="checkbox" id="notif-toggle"> Notify me about new delays, cancellations, and service alerts — even when the app is closed.</label>
+            <label class="check"><input type="checkbox" id="notif-toggle"> Notify me about new delays, cancellations, and service alerts, even when the app is closed.</label>
             <p id="notif-note" class="muted small" style="margin-bottom:0"></p>
           </div>
         </section>
@@ -115,7 +116,7 @@
         <div class="prefs">
           <section id="sec-windows">
             <h2>Direction windows <span class="tag">Preference</span></h2>
-            <p class="muted small">When each direction is shown by default. Mornings show Home&nbsp;→&nbsp;Work, evenings Work&nbsp;→&nbsp;Home; outside these windows — and on weekends and holidays — both directions appear.</p>
+            <p class="muted small">When each direction is shown by default. Mornings show Home&nbsp;→&nbsp;Work, evenings Work&nbsp;→&nbsp;Home; outside these windows, and on weekends and holidays, both directions appear.</p>
             <div class="card">
               <div class="grid2">
                 <label>Morning starts <input id="m0" type="time"></label>
@@ -130,7 +131,7 @@
 
           <section>
             <h2>One-off trip <span class="tag">Utility</span></h2>
-            <p class="muted small">See any two stations — a game, a visit — without saving a route.</p>
+            <p class="muted small">Check trains between any two stations, no saved route needed.</p>
             <button id="oo-open-setup" class="ghost wide">Plan a one-off trip</button>
           </section>
         </div>
@@ -183,7 +184,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
           </button>
         </div>
-        <p class="muted small">See any two stations — a game, a visit — without saving a route.</p>
+        <p class="muted small">Check trains between any two stations, no saved route needed.</p>
         <label>Line <select id="oo-line"><option value="">Choose a line…</option></select></label>
         <label>From
           <select id="oo-from"><option value="">Choose a line first…</option></select>

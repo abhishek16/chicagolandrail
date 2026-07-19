@@ -152,8 +152,8 @@ function lineColor(routeLine) {
   const l = lines.find(x => x.id === routeLine);
   return l ? l.color : "#005A45";
 }
-// "BNSF — Burlington Northern" so riders recognize the code and the full name.
-function lineLabel(l) { return `${l.id} — ${l.name}`; }
+// "BNSF · BNSF Railway" so riders recognize the code and the full name.
+function lineLabel(l) { return `${l.id} · ${l.name}`; }
 
 // ============================================================
 // SETUP VIEW
@@ -169,7 +169,7 @@ function showSetup(opts = {}) {
   $("#save-windows").onclick = () => { saveWindows(); flashOk("#win-ok"); };
   $("#notif-toggle").checked = !!S.notify;
   $("#notif-note").textContent = ("Notification" in window)
-    ? "Get alerts for new delays, cancellations, and service alerts — even when the app is closed. On iPhone, first add this app to your Home Screen from Safari."
+    ? "Get alerts for new delays, cancellations, and service alerts, even when the app is closed. On iPhone, first add this app to your Home Screen from Safari."
     : "This browser doesn't support notifications.";
 
   renderRouteList();
@@ -224,14 +224,14 @@ function setupReminders() {
   const hasRoutes = S.routes.length > 0;
   routeSel.innerHTML = hasRoutes
     ? S.routes.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join("")
-    : `<option value="">— save a route first —</option>`;
+    : `<option value="">Save a route first…</option>`;
   let remTrains = []; // trains currently in the dropdown, looked up by value on add
 
   const loadTrains = async () => {
     const trainSel = $("#rem-train");
     remTrains = [];
     const r = S.routes.find(x => x.id === routeSel.value);
-    if (!r) { trainSel.innerHTML = `<option value="">—</option>`; return; }
+    if (!r) { trainSel.innerHTML = `<option value="">Save a route first…</option>`; return; }
     const [from, to] = $("#rem-dir").value === "HW" ? [r.home, r.work] : [r.work, r.home];
     trainSel.innerHTML = `<option value="">Loading…</option>`;
     try {
@@ -240,7 +240,7 @@ function setupReminders() {
       trainSel.innerHTML = remTrains.length
         ? remTrains.map(t => `<option value="${t.depSec}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
         : `<option value="">No trains found for this route</option>`;
-    } catch { trainSel.innerHTML = `<option value="">Couldn't load trains — check connection</option>`; }
+    } catch { trainSel.innerHTML = `<option value="">Couldn't load trains. Check connection</option>`; }
   };
   routeSel.onchange = loadTrains;
   $("#rem-dir").onchange = loadTrains;
@@ -255,7 +255,7 @@ function setupReminders() {
     const trainSel = $("#rem-train");
     const depSec = Number(trainSel.value);          // read .value directly (reliable on iOS)
     const t = remTrains.find(x => Number(x.depSec) === depSec);
-    if (!trainSel.value || !t) return show(remTrains.length ? "Choose a train from the list." : "Train list is still loading — try again in a moment.");
+    if (!trainSel.value || !t) return show(remTrains.length ? "Choose a train from the list." : "Train list is still loading. Try again in a moment.");
     const [from, to, fromName, toName] = $("#rem-dir").value === "HW"
       ? [r.home, r.work, r.homeName, r.workName]
       : [r.work, r.home, r.workName, r.homeName];
@@ -293,7 +293,7 @@ function setupBriefing() {
   const hasRoutes = S.routes.length > 0;
   routeSel.innerHTML = hasRoutes
     ? S.routes.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join("")
-    : `<option value="">— save a route first —</option>`;
+    : `<option value="">Save a route first…</option>`;
   const b = S.briefing;
   $("#brief-toggle").checked = !!(b && b.enabled);
   if (b) { $("#brief-time").value = b.time || "06:45"; if (b.routeId) routeSel.value = b.routeId; }
@@ -311,13 +311,13 @@ function setupBriefing() {
       : null;
     persist(); syncPush();
     note(enabled && r
-      ? `On — ${fmtTime12(time)} on weekdays, ${r.label}.${S.notify ? "" : " Turn on Notifications above to receive it."}`
+      ? `On · ${fmtTime12(time)} on weekdays, ${r.label}.${S.notify ? "" : " Turn on Notifications above to receive it."}`
       : "Off.");
   };
   $("#brief-toggle").onchange = save;
   $("#brief-time").onchange = save;
   routeSel.onchange = save;
-  note(b && b.enabled ? `On — ${fmtTime12(b.time || "06:45")} on weekdays.` : "Off.");
+  note(b && b.enabled ? `On · ${fmtTime12(b.time || "06:45")} on weekdays.` : "Off.");
 }
 
 function fmtTime12(hhmm) {
@@ -346,7 +346,7 @@ function renderRouteList() {
   const el = $("#route-list");
   const has = S.routes.length;
   $("#route-count").textContent = has ? `(${S.routes.length}/5)` : "";
-  el.innerHTML = has ? "" : `<p class="muted small">No routes yet — tap <b>Add a route</b> below.</p>`;
+  el.innerHTML = has ? "" : `<p class="muted small">No routes yet. Tap <b>Add a route</b> below.</p>`;
   const done = $("#setup-done");
   if (done) done.classList.toggle("hidden", !(has || oneOff));
   const add = $("#add-route");
@@ -470,7 +470,7 @@ function renderWizard() {
   filter.classList.toggle("hidden", wiz.step !== 2 && wiz.step !== 3); // stations only
   if (wiz.step === 1) {
     $("#wiz-title").textContent = "Which line do you ride?";
-    $("#wiz-sub").textContent = "Eleven lines cross Chicagoland — pick yours. You can add more routes anytime.";
+    $("#wiz-sub").textContent = "Eleven lines cross Chicagoland. Pick yours; you can add more routes anytime.";
   } else if (wiz.step === 2) {
     $("#wiz-title").textContent = "Where do you board?";
     $("#wiz-sub").textContent = `${wiz.line} · We'll watch departures, delays, and weather from your home station.`;
@@ -479,7 +479,7 @@ function renderWizard() {
     $("#wiz-sub").textContent = `From ${wiz.from.name} · Every trip timed to the minute, express or local.`;
   } else {
     $("#wiz-title").textContent = "Never miss a train";
-    $("#wiz-sub").textContent = "Three optional extras — silent until something actually changes. Adjust anytime in Settings.";
+    $("#wiz-sub").textContent = "Choose what you'd like. Nothing turns on unless you say so; adjust anytime in Settings.";
   }
   if (wiz.step === 4) renderWizardFeatures(); else renderWizardList();
 }
@@ -489,7 +489,7 @@ function renderWizardList() {
   const q = $("#wiz-filter").value.trim().toLowerCase();
   if (wiz.step === 1) {
     if (!lines.length) {
-      list.innerHTML = `<div class="muted center">Couldn't load lines — check your connection.<br><br><button class="ghost" id="wiz-retry">Try again</button></div>`;
+      list.innerHTML = `<div class="muted center">Couldn't load lines. Check your connection.<br><br><button class="ghost" id="wiz-retry">Try again</button></div>`;
       $("#wiz-retry").onclick = async () => {
         try { lines = await api("/api/lines"); } catch { /* stays empty */ }
         renderWizardList();
@@ -507,7 +507,7 @@ function renderWizardList() {
   }
   if (wiz.loading) { list.innerHTML = `<div class="muted center">Loading stations…</div>`; return; }
   if (!wiz.sts.length) {
-    list.innerHTML = `<div class="muted center">Couldn't load stations — check your connection.<br><br><button class="ghost" id="wiz-retry">Try again</button></div>`;
+    list.innerHTML = `<div class="muted center">Couldn't load stations. Check your connection.<br><br><button class="ghost" id="wiz-retry">Try again</button></div>`;
     $("#wiz-retry").onclick = () => pickWizLine(wiz.line);
     return;
   }
@@ -539,7 +539,7 @@ function pickWizStation(id) {
   if (!s) return;
   if (wiz.step === 2) { wiz.from = s; wiz.step = 3; renderWizard(); return; }
   if (S.routes.length >= 5) {
-    $("#wiz-sub").textContent = "Route limit reached (5) — remove one in Settings first.";
+    $("#wiz-sub").textContent = "Route limit reached (5). Remove one in Settings first.";
     return;
   }
   const r = {
@@ -551,44 +551,125 @@ function pickWizStation(id) {
   S.routes.push(r);
   S.activeRouteId = r.id;
   persist(); syncPush();
-  // Route saved — one last screen explains alerts, reminders, and the briefing.
+  wiz.saved = r; // step 4 configures reminders/briefing against this route
+  // Route saved; one last screen offers alerts, reminders, and the briefing.
   // Browsers without notification support (the Tesla) skip it: none of it can work there.
   if (!("Notification" in window)) return finishWizard();
   wiz.step = 4;
   renderWizard();
 }
 
-const WIZ_FEATS = [
-  [`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v-5a6 6 0 1 1 12 0v5l1.8 2H4.2z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>`,
-    "Delay alerts", "A push the moment your train is delayed or cancelled — even when the app is closed."],
-  [`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M12 7.5V12l3 1.8"/></svg>`,
-    "Departure reminders", "A heads-up before the trains you always ride, live delay included. Pick your exact trains in Settings."],
-  [`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></svg>`,
-    "Morning briefing", "One daily summary before you leave: your first trains and any alerts on the line."],
+const WIZ_ICONS = [
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v-5a6 6 0 1 1 12 0v5l1.8 2H4.2z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>`,
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M12 7.5V12l3 1.8"/></svg>`,
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></svg>`,
 ];
 
+// Step 4: each feature is its own opt-in with its preferences asked right here.
+// Nothing is enabled unless the rider turns it on.
 function renderWizardFeatures() {
   const list = $("#wiz-list");
-  list.innerHTML = WIZ_FEATS.map(([icon, title, text]) =>
-    `<div class="feat">${icon}<div><b>${title}</b><span>${text}</span></div></div>`).join("") +
-    `<div class="feat-actions">
-      <button id="wiz-notify" class="primary">Turn on notifications</button>
-      <button id="wiz-later" class="ghost">Maybe later</button>
-    </div>`;
-  $("#wiz-notify").onclick = async () => {
-    const n = S.nudges || (S.nudges = {});
+  const r = wiz.saved;
+  const [bell, clock, sun] = WIZ_ICONS;
+  list.innerHTML = `
+    <div class="feat">${bell}<div><b>Delay alerts</b>
+      <span>A push the moment your train is delayed or cancelled, even when the app is closed.</span>
+      <label class="check"><input type="checkbox" id="wf-alerts"> Alert me about delays and cancellations</label>
+    </div></div>
+    <div class="feat">${clock}<div><b>Departure reminders</b>
+      <span>A heads-up before a train you ride, live delay included.</span>
+      <label class="check"><input type="checkbox" id="wf-rem"> Remind me before a train</label>
+      <div id="wf-rem-cfg" class="feat-cfg hidden">
+        <label>Direction <select id="wf-rem-dir">
+          <option value="HW">To ${esc(r.workName)}</option>
+          <option value="WH">To ${esc(r.homeName)}</option>
+        </select></label>
+        <label>Train <select id="wf-rem-train"><option value="">Loading trains…</option></select></label>
+        <div class="grid2">
+          <label>Notify before <select id="wf-rem-lead"><option value="10">10 min</option><option value="15" selected>15 min</option><option value="20">20 min</option><option value="30">30 min</option></select></label>
+          <label>Days <select id="wf-rem-days"><option value="wd">Weekdays</option><option value="all">Every day</option></select></label>
+        </div>
+      </div>
+    </div></div>
+    <div class="feat">${sun}<div><b>Morning briefing</b>
+      <span>One daily summary before you leave: your first trains and any alerts on the line.</span>
+      <label class="check"><input type="checkbox" id="wf-brief"> Send me a morning briefing</label>
+      <div id="wf-brief-cfg" class="feat-cfg hidden">
+        <div class="grid2"><label>Time <input id="wf-brief-time" type="time" value="06:45"></label></div>
+      </div>
+    </div></div>
+    <div class="feat-actions"><button id="wiz-finish" class="primary">Continue</button></div>
+    <p id="wf-note" class="muted small center-note"></p>`;
+
+  let wfTrains = [];
+  const loadTrains = async () => {
+    const sel = $("#wf-rem-train");
+    wfTrains = [];
+    sel.innerHTML = `<option value="">Loading trains…</option>`;
+    const [from, to] = $("#wf-rem-dir").value === "HW" ? [r.home, r.work] : [r.work, r.home];
     try {
-      const p = await Notification.requestPermission();
-      if (p === "granted") { S.notify = true; n.notif = "on"; subscribePush(); }
-      else n.notif = "denied";
-    } catch { n.notif = "denied"; }
-    persist();
-    finishWizard();
+      const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=today`);
+      wfTrains = (data.trains || []).filter(t => t.depSec != null);
+      sel.innerHTML = wfTrains.length
+        ? wfTrains.map(t => `<option value="${t.depSec}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
+        : `<option value="">No trains found</option>`;
+    } catch { sel.innerHTML = `<option value="">Couldn't load trains. Check connection</option>`; }
   };
-  $("#wiz-later").onclick = () => {
+  $("#wf-rem").onchange = e => {
+    $("#wf-rem-cfg").classList.toggle("hidden", !e.target.checked);
+    if (e.target.checked && !wfTrains.length) loadTrains();
+  };
+  $("#wf-rem-dir").onchange = loadTrains;
+  $("#wf-brief").onchange = e => $("#wf-brief-cfg").classList.toggle("hidden", !e.target.checked);
+  ["#wf-rem-dir", "#wf-rem-train", "#wf-rem-lead", "#wf-rem-days"].forEach(s => enhanceSelect($(s)));
+  enhanceTime($("#wf-brief-time"));
+
+  const note = m => { $("#wf-note").textContent = m; };
+  $("#wiz-finish").onclick = async () => {
     const n = S.nudges || (S.nudges = {});
-    n.notif = n.notif || "skipped"; // explained during onboarding — don't re-nag on the board
-    persist();
+    const wantAlerts = $("#wf-alerts").checked;
+    const wantRem = $("#wf-rem").checked;
+    const wantBrief = $("#wf-brief").checked;
+    if (!wantAlerts && !wantRem && !wantBrief) {
+      n.notif = n.notif || "skipped"; persist();
+      return finishWizard();
+    }
+    const remTrain = wantRem ? wfTrains.find(t => Number(t.depSec) === Number($("#wf-rem-train").value)) : null;
+    if (wantRem && !remTrain) return note("Pick a train for the reminder, or untick it.");
+    // second tap after a denial proceeds without notifications
+    if ($("#wiz-finish").dataset.denied) { persist(); return finishWizard(); }
+    let granted = false;
+    try { granted = (await Notification.requestPermission()) === "granted"; } catch { /* unsupported */ }
+    if (!granted) {
+      n.notif = "denied"; persist();
+      note("Notifications are blocked in this browser, so these can't be delivered. You can enable them later in Settings.");
+      $("#wiz-finish").dataset.denied = "1";
+      $("#wiz-finish").textContent = "Continue without notifications";
+      return;
+    }
+    S.notify = true; n.notif = "on";
+    if (remTrain) {
+      const [from, to, fromName, toName] = $("#wf-rem-dir").value === "HW"
+        ? [r.home, r.work, r.homeName, r.workName]
+        : [r.work, r.home, r.workName, r.homeName];
+      S.reminders = S.reminders || [];
+      S.reminders.push({
+        id: "rem" + Date.now(), routeId: r.id, line: r.line,
+        from, to, fromName, toName,
+        depSec: Number(remTrain.depSec), trainNo: trainNoShort(remTrain.trainNo), depLabel: remTrain.dep,
+        lead: Number($("#wf-rem-lead").value),
+        days: $("#wf-rem-days").value === "all" ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5],
+      });
+    }
+    if (wantBrief) {
+      const time = $("#wf-brief-time").value || "06:45";
+      const [h, m] = time.split(":").map(Number);
+      S.briefing = {
+        enabled: true, time, timeSec: h * 3600 + m * 60, routeId: r.id, line: r.line,
+        from: r.home, to: r.work, fromName: r.homeName, toName: r.workName, days: [1, 2, 3, 4, 5],
+      };
+    }
+    persist(); subscribePush();
     finishWizard();
   };
 }
@@ -614,7 +695,7 @@ function initOneOff() {
       ooStations = (await api(`/api/stops?route=${encodeURIComponent(ooSel.value)}`)).stations;
       $("#oo-from").innerHTML = $("#oo-to").innerHTML = stationOptions(ooStations);
     } catch {
-      $("#oo-error").textContent = "Couldn't load stations — check your connection.";
+      $("#oo-error").textContent = "Couldn't load stations. Check your connection.";
       $("#oo-error").classList.remove("hidden");
     }
   };
@@ -656,6 +737,10 @@ function showMain() {
     S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; showMain();
   };
   enhanceSelect($("#route-picker")); // tap-friendly dropdown (Tesla browser)
+  const l = lines.find(x => x.id === route.line);
+  $("#line-pill").innerHTML = `<span class="line-pill">
+    <span class="lp-dot" style="background:${esc(lineColor(route.line))}"></span>
+    <span class="lp-txt">${esc(l ? lineLabel(l) : route.line + " Line")}</span></span>`;
   // Back = manage routes (top of settings); cog = preferences (direction windows etc).
   $("#back-btn").onclick = () => { stopPolling(); showSetup(); };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup({ scrollTo: "#sec-windows" }); };
@@ -670,7 +755,7 @@ function renderSocial(route) {
   const handle = X_HANDLES[route.line] || "Metra";
   $("#social").innerHTML = `
     <details class="social">
-      <summary>Service updates — <a href="https://x.com/${handle}" target="_blank" rel="noopener">@${handle}</a> on X</summary>
+      <summary>Service updates · <a href="https://x.com/${handle}" target="_blank" rel="noopener">@${handle}</a> on X</summary>
       <div class="social-body"><div class="muted small">Tap to load the latest posts…</div></div>
     </details>`;
   const det = $("#social details");
@@ -790,7 +875,7 @@ function render(dirs, offline) {
   const seen = new Set(); const alertHtml = [];
   for (const d of dirs) for (const a of (lastData[d]?.alerts || [])) {
     if (seen.has(a.id)) continue; seen.add(a.id);
-    alertHtml.push(`<div class="alert">${esc(a.header)}${a.description ? ` — ${esc(a.description)}` : ""}</div>`);
+    alertHtml.push(`<div class="alert">${esc(a.header)}${a.description ? `. ${esc(a.description)}` : ""}</div>`);
   }
   $("#alerts").innerHTML = alertHtml.join("");
 
@@ -799,16 +884,16 @@ function render(dirs, offline) {
   const staleDays = metaStaleDays();
   if (offline) {
     const t = first ? new Date(first.fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
-    b.textContent = t ? `Offline — showing data from ${t}.` : "Offline — no cached data yet.";
+    b.textContent = t ? `Offline. Showing data from ${t}.` : "Offline. No cached data yet.";
     b.className = "banner offline";
   } else if (staleDays != null && staleDays >= 2) {
-    b.textContent = `Schedule data is ${staleDays} days old — times may be outdated.`;
+    b.textContent = `Schedule data is ${staleDays} days old. Times may be outdated.`;
     b.className = "banner";
   } else if (first && first.serviceNote) {
     b.textContent = "Modified schedule in effect today (holiday or special service).";
     b.className = "banner";
   } else if (first && first.realtime === false) {
-    b.textContent = "Live updates temporarily unavailable — showing scheduled times.";
+    b.textContent = "Live updates temporarily unavailable. Showing scheduled times.";
     b.className = "banner offline";
   } else b.className = "banner hidden";
 
@@ -926,7 +1011,7 @@ function sectionHtml(d) {
 
   const [next, ...rest] = trains;
   const hint = expressHint(trains.filter(t => !t.cancelled));
-  const label = next.cancelled ? "Next scheduled train — cancelled"
+  const label = next.cancelled ? "Next scheduled train · cancelled"
     : next.class === "E" ? "Next express train" : "Next available train";
 
   return `${head}
@@ -950,7 +1035,7 @@ function sectionHtml(d) {
       ${next.cancelled ? "" : journeyBar(data, next, d)}
       ${next.cancelled ? "" : stopsPanel(data, next, d)}
     </div>
-    ${hint ? `<div class="hint">Express Train ${esc(trainNoShort(hint.trainNo))} leaves at ${hint.dep} (in ${hint.minutes} min) — worth waiting?</div>` : ""}
+    ${hint ? `<div class="hint">Express Train ${esc(trainNoShort(hint.trainNo))} leaves at ${hint.dep} (in ${hint.minutes} min). Worth waiting?</div>` : ""}
     <div class="list">
       ${rest.map(t => `
         <div class="row ${t.cancelled ? "cancelled" : ""}${t.delayMin > 0 ? " late" : ""}">
@@ -1067,7 +1152,7 @@ function renderNudge() {
     el.innerHTML = `
       <div class="nudge">
         <div class="nudge-txt"><b>Never miss a delay</b>
-        <span>Get alerts for delays and cancellations on your line — even when the app is closed.</span></div>
+        <span>Get alerts for delays and cancellations on your line, even when the app is closed.</span></div>
         <div class="nudge-btns"><button class="primary" id="nudge-yes">Enable alerts</button>
         <button class="ghost" id="nudge-no">Not now</button></div>
       </div>`;
@@ -1110,7 +1195,7 @@ function maybeStartTour() {
 function startTour() {
   const steps = [
     ["#content .hero", "Your next train", "Live countdown, delay status, and journey progress. Tap the card to see every stop."],
-    ["#view-tabs", "Live or Schedule", "Flip between the live board and the full timetable for any day — weekends included."],
+    ["#view-tabs", "Live or Schedule", "Flip between the live board and the full timetable for any day, weekends included."],
     ["#dir-tabs", "Direction", "Inbound, outbound, or both. It follows your morning and evening windows automatically."],
     ["#oneoff-btn", "One-off trips", "Heading somewhere unusual? Check any two stations without saving a route."],
     ["#settings-btn", "Settings", "Alerts, departure reminders, the morning briefing, and preferences live here."],
@@ -1267,7 +1352,7 @@ function maybeNotify(d, data) {
   for (const a of data.alerts || []) {
     if (notifiedAlerts.has(a.id)) continue;
     notifiedAlerts.add(a.id);
-    notify("Service alert", a.header + (a.description ? ` — ${a.description}` : ""), `alert:${a.id}`);
+    notify("Service alert", a.header + (a.description ? `. ${a.description}` : ""), `alert:${a.id}`);
   }
 }
 
