@@ -440,6 +440,8 @@ function renderWizard() {
   filter.value = "";
   filter.oninput = renderWizardList;
   filter.classList.toggle("hidden", wiz.step === 1); // 11 lines need no filter
+  const hero = $("#wiz-hero"); // welcome illustration on step 1; station steps keep the space
+  if (hero) hero.classList.toggle("hidden", wiz.step !== 1);
   if (wiz.step === 1) {
     $("#wiz-title").textContent = "Which line do you ride?";
     $("#wiz-sub").textContent = "Pick your Metra line — you can add more routes later.";

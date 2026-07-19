@@ -453,35 +453,43 @@ button.ghost.wide:hover { border-color: var(--line); }
 /* ---- onboarding wizard (three full-screen questions) ---- */
 .wiz-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0; }
 .wiz-spacer { width: 36px; }
-.wiz-dots { display: flex; gap: 7px; }
+.wiz-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wiz-brand img { border-radius: 6px; display: block; }
+.wiz-brand span { font-size: 14px; font-weight: 650; letter-spacing: -0.01em; }
+.wiz-dots { display: flex; gap: 7px; justify-content: center; padding: 14px 0; }
 .wiz-dots span {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--border); transition: background 0.25s;
 }
 .wiz-dots span.on { background: var(--line); }
-.wiz-header h1 { padding: 16px 16px 0; font-size: 23px; letter-spacing: -0.02em; }
-.wiz-header p { padding: 4px 16px 0; font-size: 14px; }
+.wiz-header { padding-bottom: 0; }
+.wiz-header h1 { padding: 16px 16px 0; font-size: 23px; letter-spacing: -0.02em; text-align: center; }
+.wiz-header p { padding: 4px 16px 0; font-size: 14px; text-align: center; }
+#wiz-hero svg { display: block; width: 100%; height: auto; max-height: 110px; margin: -2px auto 0; }
 #wiz-body { flex: 1; padding-bottom: 24px; }
 #wiz-filter {
   display: block; width: calc(100% - 32px); margin: 12px 16px 0; padding: 10px 12px;
   font-size: 15px; background: var(--surface); color: var(--text);
   border: 1px solid var(--border); border-radius: 10px;
 }
-.wiz-list { padding: 12px 16px 0; }
+/* tiles: two columns once there's room — halves the scroll for 11 lines / long station lists */
+.wiz-list { padding: 12px 16px 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
+@media (min-width: 400px) { .wiz-list { grid-template-columns: 1fr 1fr; } }
+.wiz-list .center { grid-column: 1 / -1; }
 .wiz-row {
-  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
   background: var(--surface); color: var(--text); font: inherit;
   border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm);
-  padding: 12px 14px; margin-bottom: 8px; min-height: 54px; cursor: pointer;
+  padding: 10px 12px; min-height: 54px; cursor: pointer;
   transition: border-color 0.15s, transform 0.1s;
 }
 .wiz-row:hover { border-color: var(--line); }
 .wiz-row:active { transform: scale(0.985); }
 .wiz-bar { width: 6px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
 .wiz-txt { display: flex; flex-direction: column; min-width: 0; }
-.wiz-row .t { font-weight: 600; font-size: 15px; }
-.wiz-row .s { font-size: 12px; color: var(--muted); }
-.wiz-go { margin-left: auto; color: var(--muted); font-size: 20px; line-height: 1; }
+.wiz-row .t { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wiz-row .s { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wiz-go { margin-left: auto; color: var(--muted); font-size: 18px; line-height: 1; flex-shrink: 0; }
 @media (prefers-reduced-motion: reduce) { .wiz-row:active { transform: none; } }
 
 /* ---- contextual nudge cards (feature discovery on the board) ---- */
