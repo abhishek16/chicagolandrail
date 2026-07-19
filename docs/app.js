@@ -11,7 +11,7 @@ const store = {
   },
   save(s) { localStorage.setItem("mct", JSON.stringify(s)); },
 };
-let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0 }, store.load());
+let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0, tour: null }, store.load());
 const persist = () => store.save(S);
 
 let lines = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
@@ -175,6 +175,18 @@ function showSetup(opts = {}) {
   renderRouteList();
   $("#add-route").onclick = () => showWizard("settings");
   $("#setup-done").onclick = () => { if (activeRoute()) showMain(); };
+  // Erase-everything: two-tap confirm (native confirm() doesn't open in the Tesla browser).
+  const rst = $("#reset-app");
+  rst.onclick = () => {
+    if (!rst.classList.contains("confirm")) {
+      rst.classList.add("confirm"); rst.textContent = "Tap again to erase everything";
+      rst._t = setTimeout(() => { rst.classList.remove("confirm"); rst.textContent = "Erase all data & start over"; }, 4000);
+      return;
+    }
+    clearTimeout(rst._t);
+    rst.classList.remove("confirm"); rst.textContent = "Erase all data & start over";
+    resetApp();
+  };
   $("#notif-toggle").onchange = async e => {
     if (e.target.checked) {
       if (Notification.permission !== "granted") {
@@ -404,6 +416,21 @@ function flashOk(sel) {
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.add("hidden"), 2500);
 }
 
+// Erase everything saved on this device and return to first-run onboarding.
+async function resetApp() {
+  try { await unsubscribePush(); } catch { /* best effort — server sub may already be gone */ }
+  const gone = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k === "mct" || k.startsWith("mct_cache_")) gone.push(k);
+  }
+  gone.forEach(k => localStorage.removeItem(k));
+  S = { routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0, tour: null };
+  oneOff = null; lastData = {}; ttDate = null;
+  lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; weatherCache.clear();
+  showWizard("boot");
+}
+
 // ============================================================
 // ONBOARDING WIZARD — three full-screen questions to a live board
 // (line → boarding station → destination; no dropdowns anywhere)
@@ -430,29 +457,31 @@ function wizBack() {
 }
 
 function renderWizard() {
-  $("#wiz-dots").innerHTML = [1, 2, 3]
+  $("#wiz-dots").innerHTML = [1, 2, 3, 4]
     .map(i => `<span class="${i <= wiz.step ? "on" : ""}"></span>`).join("");
-  // step 1 on true first-run has nowhere to go back to — keep layout, hide button
-  const canBack = wiz.step > 1 || wiz.cameFrom === "settings" || !!activeRoute();
+  // no back on true first-run step 1 (nowhere to go) or step 4 (route already saved)
+  const canBack = wiz.step === 4 ? false
+    : wiz.step > 1 || wiz.cameFrom === "settings" || !!activeRoute();
   $("#wiz-back").classList.toggle("invisible", !canBack);
   $("#wiz-back").onclick = wizBack;
   const filter = $("#wiz-filter");
   filter.value = "";
   filter.oninput = renderWizardList;
-  filter.classList.toggle("hidden", wiz.step === 1); // 11 lines need no filter
-  const hero = $("#wiz-hero"); // welcome illustration on step 1; station steps keep the space
-  if (hero) hero.classList.toggle("hidden", wiz.step !== 1);
+  filter.classList.toggle("hidden", wiz.step !== 2 && wiz.step !== 3); // stations only
   if (wiz.step === 1) {
     $("#wiz-title").textContent = "Which line do you ride?";
-    $("#wiz-sub").textContent = "Pick your Metra line — you can add more routes later.";
+    $("#wiz-sub").textContent = "Eleven lines cross Chicagoland — pick yours. You can add more routes anytime.";
   } else if (wiz.step === 2) {
     $("#wiz-title").textContent = "Where do you board?";
-    $("#wiz-sub").textContent = `${wiz.line} · your home station.`;
-  } else {
+    $("#wiz-sub").textContent = `${wiz.line} · We'll watch departures, delays, and weather from your home station.`;
+  } else if (wiz.step === 3) {
     $("#wiz-title").textContent = "Where do you get off?";
-    $("#wiz-sub").textContent = `${wiz.line} · from ${wiz.from.name}.`;
+    $("#wiz-sub").textContent = `From ${wiz.from.name} · Every trip timed to the minute, express or local.`;
+  } else {
+    $("#wiz-title").textContent = "Never miss a train";
+    $("#wiz-sub").textContent = "Three optional extras — silent until something actually changes. Adjust anytime in Settings.";
   }
-  renderWizardList();
+  if (wiz.step === 4) renderWizardFeatures(); else renderWizardList();
 }
 
 function renderWizardList() {
@@ -522,8 +551,51 @@ function pickWizStation(id) {
   S.routes.push(r);
   S.activeRouteId = r.id;
   persist(); syncPush();
+  // Route saved — one last screen explains alerts, reminders, and the briefing.
+  // Browsers without notification support (the Tesla) skip it: none of it can work there.
+  if (!("Notification" in window)) return finishWizard();
+  wiz.step = 4;
+  renderWizard();
+}
+
+const WIZ_FEATS = [
+  [`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16v-5a6 6 0 1 1 12 0v5l1.8 2H4.2z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>`,
+    "Delay alerts", "A push the moment your train is delayed or cancelled — even when the app is closed."],
+  [`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2"/><path d="M12 7.5V12l3 1.8"/></svg>`,
+    "Departure reminders", "A heads-up before the trains you always ride, live delay included. Pick your exact trains in Settings."],
+  [`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></svg>`,
+    "Morning briefing", "One daily summary before you leave: your first trains and any alerts on the line."],
+];
+
+function renderWizardFeatures() {
+  const list = $("#wiz-list");
+  list.innerHTML = WIZ_FEATS.map(([icon, title, text]) =>
+    `<div class="feat">${icon}<div><b>${title}</b><span>${text}</span></div></div>`).join("") +
+    `<div class="feat-actions">
+      <button id="wiz-notify" class="primary">Turn on notifications</button>
+      <button id="wiz-later" class="ghost">Maybe later</button>
+    </div>`;
+  $("#wiz-notify").onclick = async () => {
+    const n = S.nudges || (S.nudges = {});
+    try {
+      const p = await Notification.requestPermission();
+      if (p === "granted") { S.notify = true; n.notif = "on"; subscribePush(); }
+      else n.notif = "denied";
+    } catch { n.notif = "denied"; }
+    persist();
+    finishWizard();
+  };
+  $("#wiz-later").onclick = () => {
+    const n = S.nudges || (S.nudges = {});
+    n.notif = n.notif || "skipped"; // explained during onboarding — don't re-nag on the board
+    persist();
+    finishWizard();
+  };
+}
+
+function finishWizard() {
   wiz = null;
-  showMain(); // straight to the live board — the payoff
+  showMain();
 }
 
 // ============================================================
@@ -755,6 +827,7 @@ function render(dirs, offline) {
 
   dirs.forEach(loadWeather); // fill the weather line under each hero (async, optional)
   renderNudge();             // contextual feature discovery (alerts, briefing)
+  maybeStartTour();          // first board ever → skippable coach-mark walkthrough
 
   const anyAlert = seen.size > 0;
   const cancelledNext = dirs.some(d => lastData[d]?.trains?.[0]?.cancelled);
@@ -1023,6 +1096,62 @@ function renderNudge() {
     };
     $("#nudge-no").onclick = () => { n.brief = "dismissed"; persist(); renderNudge(); };
   }
+}
+
+// ---------- first-run tour (skippable coach marks over the live board) ----------
+let tourOpen = false;
+
+function maybeStartTour() {
+  if (tourOpen || S.tour || oneOff || ttDate) return;
+  if (!$("#content .hero")) return; // wait until a real board is on screen
+  startTour();
+}
+
+function startTour() {
+  const steps = [
+    ["#content .hero", "Your next train", "Live countdown, delay status, and journey progress. Tap the card to see every stop."],
+    ["#view-tabs", "Live or Schedule", "Flip between the live board and the full timetable for any day — weekends included."],
+    ["#dir-tabs", "Direction", "Inbound, outbound, or both. It follows your morning and evening windows automatically."],
+    ["#oneoff-btn", "One-off trips", "Heading somewhere unusual? Check any two stations without saving a route."],
+    ["#settings-btn", "Settings", "Alerts, departure reminders, the morning briefing, and preferences live here."],
+  ].filter(([sel]) => $(sel));
+  if (!steps.length) { S.tour = "done"; persist(); return; }
+
+  tourOpen = true;
+  const el = document.createElement("div");
+  el.id = "tour"; el.className = "tour-backdrop";
+  el.innerHTML = `<div class="tour-ring"></div>
+    <div class="tour-card"><b></b><p></p>
+      <div class="tour-btns"><button class="ghost" id="tour-skip">Skip tour</button>
+      <button class="primary" id="tour-next"></button></div>
+    </div>`;
+  document.body.appendChild(el);
+
+  let idx = 0;
+  const show = () => {
+    const [sel, title, text] = steps[idx];
+    const t = $(sel);
+    if (!t) return next(); // board re-rendered under us — move on
+    t.scrollIntoView({ block: "center", behavior: "auto" });
+    const r = t.getBoundingClientRect(), pad = 6;
+    const ring = el.querySelector(".tour-ring");
+    ring.style.left = (r.left - pad) + "px";
+    ring.style.top = (r.top - pad) + "px";
+    ring.style.width = (r.width + 2 * pad) + "px";
+    ring.style.height = (r.height + 2 * pad) + "px";
+    el.querySelector("b").textContent = title;
+    el.querySelector("p").textContent = text;
+    $("#tour-next").textContent = idx === steps.length - 1 ? "Done" : `Next · ${idx + 1} of ${steps.length}`;
+    const card = el.querySelector(".tour-card");
+    card.style.left = Math.max(12, Math.min(r.left, window.innerWidth - 312)) + "px";
+    const below = r.bottom + pad + 12;
+    card.style.top = (below + 170 < window.innerHeight ? below : Math.max(12, r.top - pad - 170)) + "px";
+  };
+  const end = state => { S.tour = state; persist(); el.remove(); tourOpen = false; };
+  const next = () => { idx++; idx >= steps.length ? end("done") : show(); };
+  $("#tour-skip").onclick = () => end("skipped");
+  $("#tour-next").onclick = next;
+  show();
 }
 
 // ---------- weather at departure ----------
