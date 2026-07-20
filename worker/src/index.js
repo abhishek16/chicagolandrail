@@ -18,11 +18,17 @@ import { weatherFor } from "./weather.js";
 // Origin when it's on the list, so the Cloudflare Pages site, a future custom
 // domain, and the old GitHub Pages origin can all be served at once without
 // weakening to "*". A value of "*" allows any origin (testing only).
+//
+// Cloudflare Pages branch/hash previews (e.g. redesign.chicagolandrail.pages.dev)
+// are also allowed automatically, so a preview deploy works without adding each
+// subdomain to the secret. Only *.chicagolandrail.pages.dev matches — our own
+// project — so this doesn't open the door to arbitrary origins.
+const PAGES_PREVIEW = /^https:\/\/[a-z0-9-]+\.chicagolandrail\.pages\.dev$/i;
 function allowedOrigin(env, request) {
   const reqOrigin = request.headers.get("Origin") || "";
   const list = String(env.ALLOWED_ORIGIN || "*").split(",").map(s => s.trim()).filter(Boolean);
   if (list.includes("*")) return "*";
-  if (reqOrigin && list.includes(reqOrigin)) return reqOrigin;
+  if (reqOrigin && (list.includes(reqOrigin) || PAGES_PREVIEW.test(reqOrigin))) return reqOrigin;
   return list[0] || "*"; // unlisted origin → the browser blocks it; send a stable default
 }
 
