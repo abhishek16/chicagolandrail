@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Living Map — redesign preview</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@300;600;800&family=Overpass+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0A0F15; --water:#0D1926; --ink:#E9EDF2; --mut:#7E8A97; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font-family:Overpass,system-ui,sans-serif; min-height:100dvh; }
+  header { padding:22px 20px 6px; max-width:860px; margin:0 auto; }
+  h1 { font-weight:800; font-size:clamp(22px,5vw,34px); letter-spacing:.02em; }
+  h1 em { font-style:normal; color:var(--mut); font-weight:300; }
+  .sub { color:var(--mut); font-size:13px; margin-top:2px; font-weight:300; }
+  .hint { color:var(--mut); font-size:12.5px; margin:10px 20px 0; max-width:860px; margin-inline:auto; padding-inline:20px 0; }
+  .hint b { color:var(--ink); font-weight:600; }
+  #focus-chip { display:none; margin:10px auto 0; max-width:860px; padding:0 20px; }
+  #focus-chip span { display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:14px;
+    border:1px solid #223041; border-radius:999px; padding:6px 14px; background:#0E151E; }
+  #focus-chip i { width:10px; height:10px; border-radius:3px; background:var(--cc,#fff); }
+  .stage { max-width:860px; margin:6px auto 110px; padding:0 8px; }
+  svg { width:100%; height:auto; display:block; }
+  .lake { fill:var(--water); stroke:#17293A; stroke-width:1.5; }
+  .lake-lbl { fill:#22394E; font:300 15px Overpass; letter-spacing:.35em; }
+  .line .hit { fill:none; stroke:#000; stroke-opacity:0; stroke-width:22; cursor:pointer; }
+  .line .glow { fill:none; stroke:var(--c); stroke-opacity:.16; stroke-width:7.5; stroke-linejoin:round; stroke-linecap:round; pointer-events:none; }
+  .line .core { fill:none; stroke:var(--c); stroke-width:2.3; stroke-linejoin:round; stroke-linecap:round; pointer-events:none; }
+  .line .stn { fill:var(--bg); stroke:var(--c); stroke-width:1.3; pointer-events:none; }
+  .line .term { fill:var(--mut); font:600 11px Overpass; pointer-events:none; }
+  .line .stn-lbl { display:none; fill:var(--ink); font:600 10px Overpass; paint-order:stroke; stroke:var(--bg); stroke-width:3; pointer-events:none; }
+  svg.focus .line { opacity:.10; transition:opacity .25s; }
+  svg.focus .line.on { opacity:1; }
+  svg.focus .line.on .core { stroke-width:3.4; }
+  svg.focus .line.on .glow { stroke-opacity:.28; }
+  svg.focus .line.on .stn { r:3; cursor:pointer; pointer-events:auto; }
+  svg.focus .line.on .stn-lbl { display:block; }
+  svg.focus .line.on .term { display:none; }
+  .hub { fill:var(--bg); stroke:#fff; stroke-width:2.4; }
+  .hub-lbl { fill:#fff; font:800 13px Overpass; letter-spacing:.14em; }
+  #train-halo { fill:var(--tc,#29C233); opacity:.25; animation:pulse 1.6s ease-in-out infinite; }
+  #train-dot { fill:#fff; stroke:var(--tc,#29C233); stroke-width:2.5; }
+  #train-lbl { fill:var(--ink); font:700 11px "Overpass Mono"; paint-order:stroke; stroke:var(--bg); stroke-width:3.5; }
+  @keyframes pulse { 0%,100%{opacity:.25; r:9} 50%{opacity:.07; r:13} }
+  .dock { position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; padding:10px 14px calc(12px + env(safe-area-inset-bottom)); pointer-events:none; }
+  .dock-card { pointer-events:auto; width:min(560px,100%); background:#0E151ECC; backdrop-filter:blur(10px);
+    border:1px solid #223041; border-radius:16px; padding:12px 16px; display:flex; align-items:center; gap:14px; }
+  .dock-time { font:700 26px/1 "Overpass Mono"; letter-spacing:.02em; }
+  .dock-meta { font-weight:300; font-size:12.5px; color:var(--mut); }
+  .dock-meta b { color:var(--ink); font-weight:600; }
+  .dock-count { margin-left:auto; text-align:right; font:700 15px "Overpass Mono"; color:#39D98A; }
+  .dock-count small { display:block; font:300 10.5px Overpass; color:var(--mut); letter-spacing:.08em; text-transform:uppercase; }
+  @media (prefers-reduced-motion:reduce){ #train-halo{animation:none} }
+</style>
+</head>
+<body>
+<header>
+  <h1>CHICAGOLAND <em>/ living map</em></h1>
+  <p class="sub">Redesign preview 01 · real station geometry from the live GTFS data · Overpass type</p>
+</header>
+<p class="hint"><b>Tap a line</b> to focus it — that's the onboarding gesture. Tap the water to release. The moving dot is a demo of live GPS train positions on the BNSF.</p>
+<div id="focus-chip"><span><i></i><em id="chip-name" style="font-style:normal"></em></span></div>
+<div class="stage">
+<svg id="map" viewBox="0 0 800 980" role="img" aria-label="Metra system map">
+  <path class="lake" d="M 556.5,-48.1 L 551.1,95.8 L 543.1,203.7 L 551.1,311.6 L 588.5,405.2 L 626,491.5 L 639.3,523.9 L 654.3,570.6 L 655.4,599.4 L 671.4,649.8 L 695.5,685.8 L 743.6,736.1 L 845.2,779.3 L 1032.3,815.3 L 840,815.3 L 840,-40 L 556.5,-40 Z"/>
+  <text class="lake-lbl" x="700.8" y="290" transform="rotate(76 700.8 290)">LAKE MICHIGAN</text>
+  <g class="line" data-id="BNSF" data-name="Burlington Northern" style="--c:#29C233">
+    <path class="hit" d="M 637.3,578.6 L 632.8,592 L 612.5,593.8 L 580.2,603.6 L 560,609.8 L 554.5,611.6 L 550.1,612.8 L 540.4,615.8 L 533,617.8 L 528.1,619.6 L 520.4,621.8 L 513.1,624 L 509.2,625.2 L 497.1,629 L 487.8,631.8 L 482.5,633.4 L 473.4,636.2 L 469,637.6 L 456.8,638.6 L 447.6,638.8 L 439,638.8 L 423.8,638.8 L 405.7,637 L 366.4,650 L 332.6,651.4 L 279.3,663.6"/>
+    <path class="glow" d="M 637.3,578.6 L 632.8,592 L 612.5,593.8 L 580.2,603.6 L 560,609.8 L 554.5,611.6 L 550.1,612.8 L 540.4,615.8 L 533,617.8 L 528.1,619.6 L 520.4,621.8 L 513.1,624 L 509.2,625.2 L 497.1,629 L 487.8,631.8 L 482.5,633.4 L 473.4,636.2 L 469,637.6 L 456.8,638.6 L 447.6,638.8 L 439,638.8 L 423.8,638.8 L 405.7,637 L 366.4,650 L 332.6,651.4 L 279.3,663.6"/>
+    <path class="core" d="M 637.3,578.6 L 632.8,592 L 612.5,593.8 L 580.2,603.6 L 560,609.8 L 554.5,611.6 L 550.1,612.8 L 540.4,615.8 L 533,617.8 L 528.1,619.6 L 520.4,621.8 L 513.1,624 L 509.2,625.2 L 497.1,629 L 487.8,631.8 L 482.5,633.4 L 473.4,636.2 L 469,637.6 L 456.8,638.6 L 447.6,638.8 L 439,638.8 L 423.8,638.8 L 405.7,637 L 366.4,650 L 332.6,651.4 L 279.3,663.6"/>
+    <circle class="stn" cx="637.3" cy="578.6" r="2.1"/><circle class="stn" cx="632.8" cy="592" r="2.1"/><circle class="stn" cx="612.5" cy="593.8" r="2.1"/><circle class="stn" cx="580.2" cy="603.6" r="2.1"/><circle class="stn" cx="560" cy="609.8" r="2.1"/><circle class="stn" cx="554.5" cy="611.6" r="2.1"/><circle class="stn" cx="550.1" cy="612.8" r="2.1"/><circle class="stn" cx="540.4" cy="615.8" r="2.1"/><circle class="stn" cx="533" cy="617.8" r="2.1"/><circle class="stn" cx="528.1" cy="619.6" r="2.1"/><circle class="stn" cx="520.4" cy="621.8" r="2.1"/><circle class="stn" cx="513.1" cy="624" r="2.1"/><circle class="stn" cx="509.2" cy="625.2" r="2.1"/><circle class="stn" cx="497.1" cy="629" r="2.1"/><circle class="stn" cx="487.8" cy="631.8" r="2.1"/><circle class="stn" cx="482.5" cy="633.4" r="2.1"/><circle class="stn" cx="473.4" cy="636.2" r="2.1"/><circle class="stn" cx="469" cy="637.6" r="2.1"/><circle class="stn" cx="456.8" cy="638.6" r="2.1"/><circle class="stn" cx="447.6" cy="638.8" r="2.1"/><circle class="stn" cx="439" cy="638.8" r="2.1"/><circle class="stn" cx="423.8" cy="638.8" r="2.1"/><circle class="stn" cx="405.7" cy="637" r="2.1"/><circle class="stn" cx="366.4" cy="650" r="2.1"/><circle class="stn" cx="332.6" cy="651.4" r="2.1"/><circle class="stn" cx="279.3" cy="663.6" r="2.1"/><text class="stn-lbl" x="644.3" y="581.6"
+      text-anchor="start">Chicago Union Station</text><text class="stn-lbl" x="639.8" y="595"
+      text-anchor="start">Halsted Street</text><text class="stn-lbl" x="619.5" y="596.8"
+      text-anchor="start">Western Avenue</text><text class="stn-lbl" x="587.2" y="606.6"
+      text-anchor="start">Cicero</text><text class="stn-lbl" x="567" y="612.8"
+      text-anchor="start">Lavergne</text><text class="stn-lbl" x="561.5" y="614.6"
+      text-anchor="start">Berwyn</text><text class="stn-lbl" x="557.1" y="615.8"
+      text-anchor="start">Harlem Ave.</text><text class="stn-lbl" x="547.4" y="618.8"
+      text-anchor="start">Riverside</text><text class="stn-lbl" x="540" y="620.8"
+      text-anchor="start">Hollywood</text><text class="stn-lbl" x="535.1" y="622.6"
+      text-anchor="start">Brookfield</text><text class="stn-lbl" x="527.4" y="624.8"
+      text-anchor="start">Congress Park</text><text class="stn-lbl" x="520.1" y="627"
+      text-anchor="start">LaGrange Road</text><text class="stn-lbl" x="516.2" y="628.2"
+      text-anchor="start">Stone Ave.</text><text class="stn-lbl" x="504.1" y="632"
+      text-anchor="start">Western Springs</text><text class="stn-lbl" x="494.8" y="634.8"
+      text-anchor="start">Highlands</text><text class="stn-lbl" x="489.5" y="636.4"
+      text-anchor="start">Hinsdale</text><text class="stn-lbl" x="480.4" y="639.2"
+      text-anchor="start">West Hinsdale</text><text class="stn-lbl" x="476" y="640.6"
+      text-anchor="start">Clarendon Hills</text><text class="stn-lbl" x="463.8" y="641.6"
+      text-anchor="start">Westmont</text><text class="stn-lbl" x="454.6" y="641.8"
+      text-anchor="start">Fairview Ave.</text><text class="stn-lbl" x="446" y="641.8"
+      text-anchor="start">Downers Grove</text><text class="stn-lbl" x="430.8" y="641.8"
+      text-anchor="start">Belmont</text><text class="stn-lbl" x="412.7" y="640"
+      text-anchor="start">Lisle</text><text class="stn-lbl" x="373.4" y="653"
+      text-anchor="start">Naperville</text><text class="stn-lbl" x="339.6" y="654.4"
+      text-anchor="start">Route 59</text><text class="stn-lbl" x="286.3" y="666.6"
+      text-anchor="start">Aurora</text>
+    <text class="term" x="288.3" y="667.1" text-anchor="start">Aurora</text>
+  </g>
+<g class="line" data-id="HC" data-name="Heritage Corridor" style="--c:#65110e">
+    <path class="hit" d="M 637.3,578.6 L 545.9,639 L 509.2,683.4 L 442.8,726.3 L 417.7,752.5 L 412,790.1 L 401.6,833.7"/>
+    <path class="glow" d="M 637.3,578.6 L 545.9,639 L 509.2,683.4 L 442.8,726.3 L 417.7,752.5 L 412,790.1 L 401.6,833.7"/>
+    <path class="core" d="M 637.3,578.6 L 545.9,639 L 509.2,683.4 L 442.8,726.3 L 417.7,752.5 L 412,790.1 L 401.6,833.7"/>
+    <circle class="stn" cx="637.3" cy="578.6" r="2.1"/><circle class="stn" cx="545.9" cy="639" r="2.1"/><circle class="stn" cx="509.2" cy="683.4" r="2.1"/><circle class="stn" cx="442.8" cy="726.3" r="2.1"/><circle class="stn" cx="417.7" cy="752.5" r="2.1"/><circle class="stn" cx="412" cy="790.1" r="2.1"/><circle class="stn" cx="401.6" cy="833.7" r="2.1"/><text class="stn-lbl" x="644.3" y="581.6"
+      text-anchor="start">Chicago Union Station</text><text class="stn-lbl" x="552.9" y="642"
+      text-anchor="start">Summit</text><text class="stn-lbl" x="516.2" y="686.4"
+      text-anchor="start">Willow Springs</text><text class="stn-lbl" x="449.8" y="729.3"
+      text-anchor="start">Lemont</text><text class="stn-lbl" x="424.7" y="755.5"
+      text-anchor="start">Romeoville</text><text class="stn-lbl" x="419" y="793.1"
+      text-anchor="start">Lockport</text><text class="stn-lbl" x="408.6" y="836.7"
+      text-anchor="start">Joliet</text>
+    <text class="term" x="410.6" y="837.2" text-anchor="start">Joliet</text>
+  </g>
+<g class="line" data-id="MD-N" data-name="Milwaukee North" style="--c:#CC5500">
+    <path class="hit" d="M 637.3,578.6 L 611,571.2 L 589.7,545.7 L 583,528.3 L 580.1,520.5 L 574.9,507.3 L 569.5,493.1 L 559,466.3 L 552.8,449.5 L 548.1,437.5 L 542.7,421.3 L 536.3,400.2 L 529,382.4 L 524.4,370.6 L 511.2,330.6 L 467.5,282 L 436,260.7 L 421,251.5 L 393.8,236.5 L 375.7,226.7 L 362.1,215.3 L 346.8,204.9"/>
+    <path class="glow" d="M 637.3,578.6 L 611,571.2 L 589.7,545.7 L 583,528.3 L 580.1,520.5 L 574.9,507.3 L 569.5,493.1 L 559,466.3 L 552.8,449.5 L 548.1,437.5 L 542.7,421.3 L 536.3,400.2 L 529,382.4 L 524.4,370.6 L 511.2,330.6 L 467.5,282 L 436,260.7 L 421,251.5 L 393.8,236.5 L 375.7,226.7 L 362.1,215.3 L 346.8,204.9"/>
+    <path class="core" d="M 637.3,578.6 L 611,571.2 L 589.7,545.7 L 583,528.3 L 580.1,520.5 L 574.9,507.3 L 569.5,493.1 L 559,466.3 L 552.8,449.5 L 548.1,437.5 L 542.7,421.3 L 536.3,400.2 L 529,382.4 L 524.4,370.6 L 511.2,330.6 L 467.5,282 L 436,260.7 L 421,251.5 L 393.8,236.5 L 375.7,226.7 L 362.1,215.3 L 346.8,204.9"/>
+    <circle class="stn" cx="637.3" cy="578.6" r="2.1"/><circle class="stn" cx="611" cy="571.2" r="2.1"/><circle class="stn" cx="589.7" cy="545.7" r="2.1"/><circle class="stn" cx="583" cy="528.3" r="2.1"/><circle class="stn" cx="580.1" cy="520.5" r="2.1"/><circle class="stn" cx="574.9" cy="507.3" r="2.1"/><circle class="stn" cx="569.5" cy="493.1" r="2.1"/><circle class="stn" cx="559" cy="466.3" r="2.1"/><circle class="stn" cx="552.8" cy="449.5" r="2.1"/><circle class="stn" cx="548.1" cy="437.5" r="2.1"/><circle class="stn" cx="542.7" cy="421.3" r="2.1"/><circle class="stn" cx="536.3" cy="400.2" r="2.1"/><circle class="stn" cx="529" cy="382.4" r="2.1"/><circle class="stn" cx="524.4" cy="370.6" r="2.1"/><circle class="stn" cx="511.2" cy="330.6" r="2.1"/><circle class="stn" cx="467.5" cy="282" r="2.1"/><circle class="stn" cx="436" cy="260.7" r="2.1"/><circle class="stn" cx="421" cy="251.5" r="2.1"/><circle class="stn" cx="393.8" cy="236.5" r="2.1"/><circle class="stn" cx="375.7" cy="226.7" r="2.1"/><circle class="stn" cx="362.1" cy="215.3" r="2.1"/><circle class="stn" cx="346.8" cy="204.9" r="2.1"/><text class="stn-lbl" x="644.3" y="581.6"
+      text-anchor="start">Chicago Union Station</text><text class="stn-lbl" x="618" y="574.2"
+      text-anchor="start">Western Ave</text><text class="stn-lbl" x="596.7" y="548.7"
+      text-anchor="start">Healy</text><text class="stn-lbl" x="590" y="531.3"
+      text-anchor="start">Grayland</text><text class="stn-lbl" x="587.1" y="523.5"
+      text-anchor="start">Mayfair</text><text class="stn-lbl" x="581.9" y="510.3"
+      text-anchor="start">Forest Glen</text><text class="stn-lbl" x="576.5" y="496.1"
+      text-anchor="start">Edgebrook</text><text class="stn-lbl" x="566" y="469.3"
+      text-anchor="start">Morton Grove</text><text class="stn-lbl" x="559.8" y="452.5"
+      text-anchor="start">Golf</text><text class="stn-lbl" x="555.1" y="440.5"
+      text-anchor="start">Glenview</text><text class="stn-lbl" x="549.7" y="424.3"
+      text-anchor="start">Glen/N. Glenview</text><text class="stn-lbl" x="543.3" y="403.2"
+      text-anchor="start">Northbrook</text><text class="stn-lbl" x="536" y="385.4"
+      text-anchor="start">Lake-Cook</text><text class="stn-lbl" x="531.4" y="373.6"
+      text-anchor="start">Deerfield</text><text class="stn-lbl" x="518.2" y="333.6"
+      text-anchor="start">Lake Forest</text><text class="stn-lbl" x="474.5" y="285"
+      text-anchor="start">Libertyville</text><text class="stn-lbl" x="443" y="263.7"
+      text-anchor="start">Prairie Crossing</text><text class="stn-lbl" x="428" y="254.5"
+      text-anchor="start">Grayslake</text><text class="stn-lbl" x="400.8" y="239.5"
+      text-anchor="start">Round Lake</text><text class="stn-lbl" x="382.7" y="229.7"
+      text-anchor="start">Long Lake</text><text class="stn-lbl" x="369.1" y="218.3"
+      text-anchor="start">Ingleside</text><text class="stn-lbl" x="353.8" y="207.9"
+      text-anchor="start">Fox Lake</text>
+    <text class="term" x="355.8" y="208.4" text-anchor="start">Fox Lake</text>
+  </g>
+<g class="line" data-id="MD-W" data-name="Milwaukee West" style="--c:#F1AD0E">
+    <path class="hit" d="M 637.3,578.6 L 611,571.2 L 579.9,553.1 L 568.8,551.5 L 558.7,551.7 L 554.1,549.7 L 550.2,547.9 L 543.2,545.7 L 531.8,541.1 L 515.6,537.1 L 506.6,533.5 L 475.2,522.5 L 457.4,518.5 L 436.6,512.1 L 417,507.3 L 408.2,504.9 L 381.1,499.3 L 364.4,500.1 L 345.9,497.1 L 295.1,472.5 L 291.2,465.5 L 268.9,449.3"/>
+    <path class="glow" d="M 637.3,578.6 L 611,571.2 L 579.9,553.1 L 568.8,551.5 L 558.7,551.7 L 554.1,549.7 L 550.2,547.9 L 543.2,545.7 L 531.8,541.1 L 515.6,537.1 L 506.6,533.5 L 475.2,522.5 L 457.4,518.5 L 436.6,512.1 L 417,507.3 L 408.2,504.9 L 381.1,499.3 L 364.4,500.1 L 345.9,497.1 L 295.1,472.5 L 291.2,465.5 L 268.9,449.3"/>
+    <path class="core" d="M 637.3,578.6 L 611,571.2 L 579.9,553.1 L 568.8,551.5 L 558.7,551.7 L 554.1,549.7 L 550.2,547.9 L 543.2,545.7 L 531.8,541.1 L 515.6,537.1 L 506.6,533.5 L 475.2,522.5 L 457.4,518.5 L 436.6,512.1 L 417,507.3 L 408.2,504.9 L 381.1,499.3 L 364.4,500.1 L 345.9,497.1 L 295.1,472.5 L 291.2,465.5 L 268.9,449.3"/>
+    <circle class="stn" cx="637.3" cy="578.6" r="2.1"/><circle class="stn" cx="611" cy="571.2" r="2.1"/><circle class="stn" cx="579.9" cy="553.1" r="2.1"/><circle class="stn" cx="568.8" cy="551.5" r="2.1"/><circle class="stn" cx="558.7" cy="551.7" r="2.1"/><circle class="stn" cx="554.1" cy="549.7" r="2.1"/><circle class="stn" cx="550.2" cy="547.9" r="2.1"/><circle class="stn" cx="543.2" cy="545.7" r="2.1"/><circle class="stn" cx="531.8" cy="541.1" r="2.1"/><circle class="stn" cx="515.6" cy="537.1" r="2.1"/><circle class="stn" cx="506.6" cy="533.5" r="2.1"/><circle class="stn" cx="475.2" cy="522.5" r="2.1"/><circle class="stn" cx="457.4" cy="518.5" r="2.1"/><circle class="stn" cx="436.6" cy="512.1" r="2.1"/><circle class="stn" cx="417" cy="507.3" r="2.1"/><circle class="stn" cx="408.2" cy="504.9" r="2.1"/><circle class="stn" cx="381.1" cy="499.3" r="2.1"/><circle class="stn" cx="364.4" cy="500.1" r="2.1"/><circle class="stn" cx="345.9" cy="497.1" r="2.1"/><circle class="stn" cx="295.1" cy="472.5" r="2.1"/><circle class="stn" cx="291.2" cy="465.5" r="2.1"/><circle class="stn" cx="268.9" cy="449.3" r="2.1"/><text class="stn-lbl" x="644.3" y="581.6"
+      text-anchor="start">Chicago Union Station</text><text class="stn-lbl" x="618" y="574.2"
+      text-anchor="start">Western Ave</text><text class="stn-lbl" x="586.9" y="556.1"
+      text-anchor="start">Grand/Cicero</text><text class="stn-lbl" x="575.8" y="554.5"
+      text-anchor="start">Hanson Park</text><text class="stn-lbl" x="565.7" y="554.7"
+      text-anchor="start">Galewood</text><text class="stn-lbl" x="561.1" y="552.7"
+      text-anchor="start">Mars</text><text class="stn-lbl" x="557.2" y="550.9"
+      text-anchor="start">Mont Clare</text><text class="stn-lbl" x="550.2" y="548.7"
+      text-anchor="start">Elmwood Park</text><text class="stn-lbl" x="538.8" y="544.1"
+      text-anchor="start">River Grove</text><text class="stn-lbl" x="522.6" y="540.1"
+      text-anchor="start">Franklin Park</text><text class="stn-lbl" x="513.6" y="536.5"
+      text-anchor="start">Mannheim</text><text class="stn-lbl" x="482.2" y="525.5"
+      text-anchor="start">Bensenville</text><text class="stn-lbl" x="464.4" y="521.5"
+      text-anchor="start">Wood Dale</text><text class="stn-lbl" x="443.6" y="515.1"
+      text-anchor="start">Itasca</text><text class="stn-lbl" x="424" y="510.3"
+      text-anchor="start">Medinah</text><text class="stn-lbl" x="415.2" y="507.9"
+      text-anchor="start">Roselle</text><text class="stn-lbl" x="388.1" y="502.3"
+      text-anchor="start">Schaumburg</text><text class="stn-lbl" x="371.4" y="503.1"
+      text-anchor="start">Hanover Park</text><text class="stn-lbl" x="352.9" y="500.1"
+      text-anchor="start">Bartlett</text><text class="stn-lbl" x="302.1" y="475.5"
+      text-anchor="start">National St</text><text class="stn-lbl" x="298.2" y="468.5"
+      text-anchor="start">Elgin</text><text class="stn-lbl" x="275.9" y="452.3"
+      text-anchor="start">Big Timber</text>
+    <text class="term" x="277.9" y="452.8" text-anchor="start">Big Timber</text>
+  </g>
+<g class="line" data-id="ME" data-name="Metra Electric" style="--c:#EB5C00">
+    <path class="hit" d="M 645.7,574.8 L 645.7,580 L 646.6,586 L 648.4,593.4 L 649.3,598.4 L 650.9,603.6 L 662.7,628.4 L 665,635.4 L 664.7,640.2 L 664.1,644 L 663.1,649.6 L 665,659.8 L 670.5,659.8 L 676.3,660.4 L 679.7,665.2 L 683.4,669.8 L 683.9,675 L 685.7,680.2 L 686,688.2 L 660.6,665 L 659.5,670.8 L 658.8,675.6 L 657.9,680.8 L 657,686.2 L 654.2,702.3 L 653.3,707.5 L 652.4,712.5 L 651.5,717.5 L 646.3,725.7 L 641.1,725.7 L 635.5,725.9 L 630.3,725.9 L 625.7,729.3 L 621.2,734.5 L 617.5,738.9 L 645.6,745.7 L 641.9,755.3 L 638.7,762.9 L 634.6,773.3 L 626.7,793.1 L 624.6,798.3 L 621.4,806.5 L 616,820.3 L 609.9,835.9 L 605.5,846.8 L 603.4,852.2 L 599.5,861.6 L 592.1,880.4"/>
+    <path class="glow" d="M 645.7,574.8 L 645.7,580 L 646.6,586 L 648.4,593.4 L 649.3,598.4 L 650.9,603.6 L 662.7,628.4 L 665,635.4 L 664.7,640.2 L 664.1,644 L 663.1,649.6 L 665,659.8 L 670.5,659.8 L 676.3,660.4 L 679.7,665.2 L 683.4,669.8 L 683.9,675 L 685.7,680.2 L 686,688.2 L 660.6,665 L 659.5,670.8 L 658.8,675.6 L 657.9,680.8 L 657,686.2 L 654.2,702.3 L 653.3,707.5 L 652.4,712.5 L 651.5,717.5 L 646.3,725.7 L 641.1,725.7 L 635.5,725.9 L 630.3,725.9 L 625.7,729.3 L 621.2,734.5 L 617.5,738.9 L 645.6,745.7 L 641.9,755.3 L 638.7,762.9 L 634.6,773.3 L 626.7,793.1 L 624.6,798.3 L 621.4,806.5 L 616,820.3 L 609.9,835.9 L 605.5,846.8 L 603.4,852.2 L 599.5,861.6 L 592.1,880.4"/>
+    <path class="core" d="M 645.7,574.8 L 645.7,580 L 646.6,586 L 648.4,593.4 L 649.3,598.4 L 650.9,603.6 L 662.7,628.4 L 665,635.4 L 664.7,640.2 L 664.1,644 L 663.1,649.6 L 665,659.8 L 670.5,659.8 L 676.3,660.4 L 679.7,665.2 L 683.4,669.8 L 683.9,675 L 685.7,680.2 L 686,688.2 L 660.6,665 L 659.5,670.8 L 658.8,675.6 L 657.9,680.8 L 657,686.2 L 654.2,702.3 L 653.3,707.5 L 652.4,712.5 L 651.5,717.5 L 646.3,725.7 L 641.1,725.7 L 635.5,725.9 L 630.3,725.9 L 625.7,729.3 L 621.2,734.5 L 617.5,738.9 L 645.6,745.7 L 641.9,755.3 L 638.7,762.9 L 634.6,773.3 L 626.7,793.1 L 624.6,798.3 L 621.4,806.5 L 616,820.3 L 609.9,835.9 L 605.5,846.8 L 603.4,852.2 L 599.5,861.6 L 592.1,880.4"/>
+    <circle class="stn" cx="645.7" cy="574.8" r="2.1"/><circle class="stn" cx="645.7" cy="580" r="2.1"/><circle class="stn" cx="646.6" cy="586" r="2.1"/><circle class="stn" cx="648.4" cy="593.4" r="2.1"/><circle class="stn" cx="649.3" cy="598.4" r="2.1"/><circle class="stn" cx="650.9" cy="603.6" r="2.1"/><circle class="stn" cx="662.7" cy="628.4" r="2.1"/><circle class="stn" cx="665" cy="635.4" r="2.1"/><circle class="stn" cx="664.7" cy="640.2" r="2.1"/><circle class="stn" cx="664.1" cy="644" r="2.1"/><circle class="stn" cx="663.1" cy="649.6" r="2.1"/><circle class="stn" cx="665" cy="659.8" r="2.1"/><circle class="stn" cx="670.5" cy="659.8" r="2.1"/><circle class="stn" cx="676.3" cy="660.4" r="2.1"/><circle class="stn" cx="679.7" cy="665.2" r="2.1"/><circle class="stn" cx="683.4" cy="669.8" r="2.1"/><circle class="stn" cx="683.9" cy="675" r="2.1"/><circle class="stn" cx="685.7" cy="680.2" r="2.1"/><circle class="stn" cx="686" cy="688.2" r="2.1"/><circle class="stn" cx="660.6" cy="665" r="2.1"/><circle class="stn" cx="659.5" cy="670.8" r="2.1"/><circle class="stn" cx="658.8" cy="675.6" r="2.1"/><circle class="stn" cx="657.9" cy="680.8" r="2.1"/><circle class="stn" cx="657" cy="686.2" r="2.1"/><circle class="stn" cx="654.2" cy="702.3" r="2.1"/><circle class="stn" cx="653.3" cy="707.5" r="2.1"/><circle class="stn" cx="652.4" cy="712.5" r="2.1"/><circle class="stn" cx="651.5" cy="717.5" r="2.1"/><circle class="stn" cx="646.3" cy="725.7" r="2.1"/><circle class="stn" cx="641.1" cy="725.7" r="2.1"/><circle class="stn" cx="635.5" cy="725.9" r="2.1"/><circle class="stn" cx="630.3" cy="725.9" r="2.1"/><circle class="stn" cx="625.7" cy="729.3" r="2.1"/><circle class="stn" cx="621.2" cy="734.5" r="2.1"/><circle class="stn" cx="617.5" cy="738.9" r="2.1"/><circle class="stn" cx="645.6" cy="745.7" r="2.1"/><circle class="stn" cx="641.9" cy="755.3" r="2.1"/><circle class="stn" cx="638.7" cy="762.9" r="2.1"/><circle class="stn" cx="634.6" cy="773.3" r="2.1"/><circle class="stn" cx="626.7" cy="793.1" r="2.1"/><circle class="stn" cx="624.6" cy="798.3" r="2.1"/><circle class="stn" cx="621.4" cy="806.5" r="2.1"/><circle class="stn" cx="616" cy="820.3" r="2.1"/><circle class="stn" cx="609.9" cy="835.9" r="2.1"/><circle class="stn" cx="605.5" cy="846.8" r="2.1"/><circle class="stn" cx="603.4" cy="852.2" r="2.1"/><circle class="stn" cx="599.5" cy="861.6" r="2.1"/><circle class="stn" cx="592.1" cy="880.4" r="2.1"/><text class="stn-lbl" x="638.7" y="577.8"
+      text-anchor="end">Millennium Station</text><text class="stn-lbl" x="638.7" y="583"
+      text-anchor="end">Van Buren St.</text><text class="stn-lbl" x="639.6" y="589"
+      text-anchor="end">Museum Campus/11th St.</text><text class="stn-lbl" x="641.4" y="596.4"
+      text-anchor="end">18th St.</text><text class="stn-lbl" x="642.3" y="601.4"
+      text-anchor="end">McCormick Place</text><text class="stn-lbl" x="643.9" y="606.6"
+      text-anchor="end">27th St.</text><text class="stn-lbl" x="655.7" y="631.4"
+      text-anchor="end">47th St. (Kenwood)</text><text class="stn-lbl" x="658" y="638.4"
+      text-anchor="end">51st/53rd St. (Hyde Park)</text><text class="stn-lbl" x="657.7" y="643.2"
+      text-anchor="end">55th - 56th - 57th St.</text><text class="stn-lbl" x="657.1" y="647"
+      text-anchor="end">59th St. (U. of Chicago)</text><text class="stn-lbl" x="656.1" y="652.6"
+      text-anchor="end">63rd St.</text><text class="stn-lbl" x="658" y="662.8"
+      text-anchor="end">Stony Island</text><text class="stn-lbl" x="663.5" y="662.8"
+      text-anchor="end">Bryn Mawr</text><text class="stn-lbl" x="669.3" y="663.4"
+      text-anchor="end">South Shore</text><text class="stn-lbl" x="672.7" y="668.2"
+      text-anchor="end">Windsor Park</text><text class="stn-lbl" x="676.4" y="672.8"
+      text-anchor="end">Cheltenham (79th St.)</text><text class="stn-lbl" x="676.9" y="678"
+      text-anchor="end">83rd St.</text><text class="stn-lbl" x="678.7" y="683.2"
+      text-anchor="end">87th St.</text><text class="stn-lbl" x="679" y="691.2"
+      text-anchor="end">South Chicago (93rd)</text><text class="stn-lbl" x="653.6" y="668"
+      text-anchor="end">75th St. (Grand Crossing)</text><text class="stn-lbl" x="652.5" y="673.8"
+      text-anchor="end">79th St. (Chatham)</text><text class="stn-lbl" x="651.8" y="678.6"
+      text-anchor="end">83rd St. (Avalon Park)</text><text class="stn-lbl" x="650.9" y="683.8"
+      text-anchor="end">87th St. (Woodruff)</text><text class="stn-lbl" x="650" y="689.2"
+      text-anchor="end">91st St.</text><text class="stn-lbl" x="647.2" y="705.3"
+      text-anchor="end">103rd St. (Rosemoor)</text><text class="stn-lbl" x="646.3" y="710.5"
+      text-anchor="end">107th St.</text><text class="stn-lbl" x="645.4" y="715.5"
+      text-anchor="end">111th St. (Pullman)</text><text class="stn-lbl" x="644.5" y="720.5"
+      text-anchor="end">Kensington</text><text class="stn-lbl" x="639.3" y="728.7"
+      text-anchor="end">State St.</text><text class="stn-lbl" x="634.1" y="728.7"
+      text-anchor="end">Stewart Ridge</text><text class="stn-lbl" x="642.5" y="728.9"
+      text-anchor="start">West Pullman</text><text class="stn-lbl" x="637.3" y="728.9"
+      text-anchor="start">Racine</text><text class="stn-lbl" x="632.7" y="732.3"
+      text-anchor="start">Ashland</text><text class="stn-lbl" x="628.2" y="737.5"
+      text-anchor="start">Burr Oak</text><text class="stn-lbl" x="624.5" y="741.9"
+      text-anchor="start">Blue Island</text><text class="stn-lbl" x="638.6" y="748.7"
+      text-anchor="end">Riverdale</text><text class="stn-lbl" x="634.9" y="758.3"
+      text-anchor="end">Ivanhoe</text><text class="stn-lbl" x="631.7" y="765.9"
+      text-anchor="end">147th St.</text><text class="stn-lbl" x="641.6" y="776.3"
+      text-anchor="start">Harvey</text><text class="stn-lbl" x="633.7" y="796.1"
+      text-anchor="start">Hazel Crest</text><text class="stn-lbl" x="631.6" y="801.3"
+      text-anchor="start">Calumet</text><text class="stn-lbl" x="628.4" y="809.5"
+      text-anchor="start">Homewood</text><text class="stn-lbl" x="623" y="823.3"
+      text-anchor="start">Flossmoor</text><text class="stn-lbl" x="616.9" y="838.9"
+      text-anchor="start">Olympia Fields</text><text class="stn-lbl" x="612.5" y="849.8"
+      text-anchor="start">211th St.</text><text class="stn-lbl" x="610.4" y="855.2"
+      text-anchor="start">Matteson</text><text class="stn-lbl" x="606.5" y="864.6"
+      text-anchor="start">Richton Park</text><text class="stn-lbl" x="599.1" y="883.4"
+      text-anchor="start">University Park</text>
+    <text class="term" x="601.1" y="883.9" text-anchor="start">University Park</text>
+  </g>
+<g class="line" data-id="NCS" data-name="North Central Service" style="--c:#9785BC">
+    <path class="hit" d="M 637.3,578.6 L 611,571.2 L 531.8,541.1 L 519,536.3 L 513.4,518.3 L 511.6,508.7 L 508,495.1 L 493.3,425.1 L 483.1,393.4 L 475.5,370.2 L 467.8,349 L 463.2,336.4 L 445.2,299.4 L 435,262.7 L 417.2,233.1 L 409.1,214.5 L 401.7,191.1 L 394.7,145.3"/>
+    <path class="glow" d="M 637.3,578.6 L 611,571.2 L 531.8,541.1 L 519,536.3 L 513.4,518.3 L 511.6,508.7 L 508,495.1 L 493.3,425.1 L 483.1,393.4 L 475.5,370.2 L 467.8,349 L 463.2,336.4 L 445.2,299.4 L 435,262.7 L 417.2,233.1 L 409.1,214.5 L 401.7,191.1 L 394.7,145.3"/>
+    <path class="core" d="M 637.3,578.6 L 611,571.2 L 531.8,541.1 L 519,536.3 L 513.4,518.3 L 511.6,508.7 L 508,495.1 L 493.3,425.1 L 483.1,393.4 L 475.5,370.2 L 467.8,349 L 463.2,336.4 L 445.2,299.4 L 435,262.7 L 417.2,233.1 L 409.1,214.5 L 401.7,191.1 L 394.7,145.3"/>
+    <circle class="stn" cx="637.3" cy="578.6" r="2.1"/><circle class="stn" cx="611" cy="571.2" r="2.1"/><circle class="stn" cx="531.8" cy="541.1" r="2.1"/><circle class="stn" cx="519" cy="536.3" r="2.1"/><circle class="stn" cx="513.4" cy="518.3" r="2.1"/><circle class="stn" cx="511.6" cy="508.7" r="2.1"/><circle class="stn" cx="508" cy="495.1" r="2.1"/><circle class="stn" cx="493.3" cy="425.1" r="2.1"/><circle class="stn" cx="483.1" cy="393.4" r="2.1"/><circle class="stn" cx="475.5" cy="370.2" r="2.1"/><circle class="stn" cx="467.8" cy="349" r="2.1"/><circle class="stn" cx="463.2" cy="336.4" r="2.1"/><circle class="stn" cx="445.2" cy="299.4" r="2.1"/><circle class="stn" cx="435" cy="262.7" r="2.1"/><circle class="stn" cx="417.2" cy="233.1" r="2.1"/><circle class="stn" cx="409.1" cy="214.5" r="2.1"/><circle class="stn" cx="401.7" cy="191.1" r="2.1"/><circle class="stn" cx="394.7" cy="145.3" r="2.1"/><text class="stn-lbl" x="644.3" y="581.6"
+      text-anchor="start">Chicago Union Station</text><text class="stn-lbl" x="618" y="574.2"
+      text-anchor="start">Western Ave</text><text class="stn-lbl" x="538.8" y="544.1"
+      text-anchor="start">River Grove</text><text class="stn-lbl" x="526" y="539.3"
+      text-anchor="start">Franklin Pk</text><text class="stn-lbl" x="520.4" y="521.3"
+      text-anchor="start">Schiller Park</text><text class="stn-lbl" x="518.6" y="511.7"
+      text-anchor="start">Rosemont</text><text class="stn-lbl" x="515" y="498.1"
+      text-anchor="start">O'Hare Transfer</text><text class="stn-lbl" x="500.3" y="428.1"
+      text-anchor="start">Prospect Hts</text><text class="stn-lbl" x="490.1" y="396.4"
+      text-anchor="start">Wheeling</text><text class="stn-lbl" x="482.5" y="373.2"
+      text-anchor="start">Buffalo Grove</text><text class="stn-lbl" x="474.8" y="352"
+      text-anchor="start">Prairie View</text><text class="stn-lbl" x="470.2" y="339.4"
+      text-anchor="start">Vernon Hills</text><text class="stn-lbl" x="452.2" y="302.4"
+      text-anchor="start">Mundelein</text><text class="stn-lbl" x="442" y="265.7"
+      text-anchor="start">Prairie Crossing.</text><text class="stn-lbl" x="424.2" y="236.1"
+      text-anchor="start">Washington St (Grayslake)</text><text class="stn-lbl" x="416.1" y="217.5"
+      text-anchor="start">Round Lake Beach</text><text class="stn-lbl" x="408.7" y="194.1"
+      text-anchor="start">Lake Villa</text><text class="stn-lbl" x="401.7" y="148.3"
+      text-anchor="start">Antioch</text>
+    <text class="term" x="403.7" y="148.8" text-anchor="start">Antioch</text>
+  </g>
+<g class="line" data-id="RI" data-name="Rock Island" style="--c:#E02400">
+    <path class="hit" d="M 640.8,580.4 L 642.5,612.8 L 634.1,681.2 L 631.2,692.2 L 628.2,703.3 L 626.6,684.2 L 622.1,687.2 L 622.1,692 L 622,697.6 L 621.2,702.9 L 620.6,708.1 L 620.3,712.5 L 619.7,718.1 L 619.3,724.3 L 618.7,728.9 L 618,734.3 L 616.5,739.9 L 607.6,749.9 L 598.3,760.3 L 584.1,776.1 L 560.3,796.7 L 546.1,804.9 L 526.8,816.3 L 504.8,829.1 L 462.7,840.8 L 401.6,833.7"/>
+    <path class="glow" d="M 640.8,580.4 L 642.5,612.8 L 634.1,681.2 L 631.2,692.2 L 628.2,703.3 L 626.6,684.2 L 622.1,687.2 L 622.1,692 L 622,697.6 L 621.2,702.9 L 620.6,708.1 L 620.3,712.5 L 619.7,718.1 L 619.3,724.3 L 618.7,728.9 L 618,734.3 L 616.5,739.9 L 607.6,749.9 L 598.3,760.3 L 584.1,776.1 L 560.3,796.7 L 546.1,804.9 L 526.8,816.3 L 504.8,829.1 L 462.7,840.8 L 401.6,833.7"/>
+    <path class="core" d="M 640.8,580.4 L 642.5,612.8 L 634.1,681.2 L 631.2,692.2 L 628.2,703.3 L 626.6,684.2 L 622.1,687.2 L 622.1,692 L 622,697.6 L 621.2,702.9 L 620.6,708.1 L 620.3,712.5 L 619.7,718.1 L 619.3,724.3 L 618.7,728.9 L 618,734.3 L 616.5,739.9 L 607.6,749.9 L 598.3,760.3 L 584.1,776.1 L 560.3,796.7 L 546.1,804.9 L 526.8,816.3 L 504.8,829.1 L 462.7,840.8 L 401.6,833.7"/>
+    <circle class="stn" cx="640.8" cy="580.4" r="2.1"/><circle class="stn" cx="642.5" cy="612.8" r="2.1"/><circle class="stn" cx="634.1" cy="681.2" r="2.1"/><circle class="stn" cx="631.2" cy="692.2" r="2.1"/><circle class="stn" cx="628.2" cy="703.3" r="2.1"/><circle class="stn" cx="626.6" cy="684.2" r="2.1"/><circle class="stn" cx="622.1" cy="687.2" r="2.1"/><circle class="stn" cx="622.1" cy="692" r="2.1"/><circle class="stn" cx="622" cy="697.6" r="2.1"/><circle class="stn" cx="621.2" cy="702.9" r="2.1"/><circle class="stn" cx="620.6" cy="708.1" r="2.1"/><circle class="stn" cx="620.3" cy="712.5" r="2.1"/><circle class="stn" cx="619.7" cy="718.1" r="2.1"/><circle class="stn" cx="619.3" cy="724.3" r="2.1"/><circle class="stn" cx="618.7" cy="728.9" r="2.1"/><circle class="stn" cx="618" cy="734.3" r="2.1"/><circle class="stn" cx="616.5" cy="739.9" r="2.1"/><circle class="stn" cx="607.6" cy="749.9" r="2.1"/><circle class="stn" cx="598.3" cy="760.3" r="2.1"/><circle class="stn" cx="584.1" cy="776.1" r="2.1"/><circle class="stn" cx="560.3" cy="796.7" r="2.1"/><circle class="stn" cx="546.1" cy="804.9" r="2.1"/><circle class="stn" cx="526.8" cy="816.3" r="2.1"/><circle class="stn" cx="504.8" cy="829.1" r="2.1"/><circle class="stn" cx="462.7" cy="840.8" r="2.1"/><circle class="stn" cx="401.6" cy="833.7" r="2.1"/><text class="stn-lbl" x="633.8" y="583.4"
+      text-anchor="end">LaSalle Street</text><text class="stn-lbl" x="635.5" y="615.8"
+      text-anchor="end">35th St. - Lou Jones</text><text class="stn-lbl" x="641.1" y="684.2"
+      text-anchor="start">Gresham</text><text class="stn-lbl" x="638.2" y="695.2"
+      text-anchor="start">95th St.-Longwood</text><text class="stn-lbl" x="635.2" y="706.3"
+      text-anchor="start">103rd St.-Washington Hts.</text><text class="stn-lbl" x="633.6" y="687.2"
+      text-anchor="start">Brainerd</text><text class="stn-lbl" x="629.1" y="690.2"
+      text-anchor="start">91st St. - Beverly Hills</text><text class="stn-lbl" x="629.1" y="695"
+      text-anchor="start">95th St. - Beverly Hills</text><text class="stn-lbl" x="629" y="700.6"
+      text-anchor="start">99th St. - Beverly Hills</text><text class="stn-lbl" x="628.2" y="705.9"
+      text-anchor="start">103rd St. - Beverly Hills</text><text class="stn-lbl" x="627.6" y="711.1"
+      text-anchor="start">107th St. - Beverly Hills</text><text class="stn-lbl" x="627.3" y="715.5"
+      text-anchor="start">111th St. - Morgan Park</text><text class="stn-lbl" x="626.7" y="721.1"
+      text-anchor="start">115th St. - Morgan Park</text><text class="stn-lbl" x="626.3" y="727.3"
+      text-anchor="start">119th St.</text><text class="stn-lbl" x="625.7" y="731.9"
+      text-anchor="start">123rd St.</text><text class="stn-lbl" x="625" y="737.3"
+      text-anchor="start">Prairie St.</text><text class="stn-lbl" x="623.5" y="742.9"
+      text-anchor="start">Blue Island-Vermont</text><text class="stn-lbl" x="614.6" y="752.9"
+      text-anchor="start">Robbins</text><text class="stn-lbl" x="605.3" y="763.3"
+      text-anchor="start">Midlothian</text><text class="stn-lbl" x="591.1" y="779.1"
+      text-anchor="start">Oak Forest</text><text class="stn-lbl" x="567.3" y="799.7"
+      text-anchor="start">Tinley Park</text><text class="stn-lbl" x="553.1" y="807.9"
+      text-anchor="start">Tinley-80th</text><text class="stn-lbl" x="533.8" y="819.3"
+      text-anchor="start">Hickory Creek</text><text class="stn-lbl" x="511.8" y="832.1"
+      text-anchor="start">Mokena</text><text class="stn-lbl" x="469.7" y="843.8"
+      text-anchor="start">New Lenox</text><text class="stn-lbl" x="408.6" y="836.7"
+      text-anchor="start">Joliet</text>
+    <text class="term" x="410.6" y="837.2" text-anchor="start">Joliet</text>
+  </g>
+<g class="line" data-id="SWS" data-name="Southwest Service" style="--c:#0042A8">
+    <path class="hit" d="M 637.3,578.6 L 602.7,672.2 L 597.9,677.4 L 578.6,693.4 L 561.7,704.9 L 553.3,713.5 L 547.4,720.3 L 540.3,729.7 L 519.5,757.3 L 511.9,772.5 L 496.3,805.3 L 465.7,862.2 L 450,910"/>
+    <path class="glow" d="M 637.3,578.6 L 602.7,672.2 L 597.9,677.4 L 578.6,693.4 L 561.7,704.9 L 553.3,713.5 L 547.4,720.3 L 540.3,729.7 L 519.5,757.3 L 511.9,772.5 L 496.3,805.3 L 465.7,862.2 L 450,910"/>
+    <path class="core" d="M 637.3,578.6 L 602.7,672.2 L 597.9,677.4 L 578.6,693.4 L 561.7,704.9 L 553.3,713.5 L 547.4,720.3 L 540.3,729.7 L 519.5,757.3 L 511.9,772.5 L 496.3,805.3 L 465.7,862.2 L 450,910"/>
+    <circle class="stn" cx="637.3" cy="578.6" r="2.1"/><circle class="stn" cx="602.7" cy="672.2" r="2.1"/><circle class="stn" cx="597.9" cy="677.4" r="2.1"/><circle class="stn" cx="578.6" cy="693.4" r="2.1"/><circle class="stn" cx="561.7" cy="704.9" r="2.1"/><circle class="stn" cx="553.3" cy="713.5" r="2.1"/><circle class="stn" cx="547.4" cy="720.3" r="2.1"/><circle class="stn" cx="540.3" cy="729.7" r="2.1"/><circle class="stn" cx="519.5" cy="757.3" r="2.1"/><circle class="stn" cx="511.9" cy="772.5" r="2.1"/><circle class="stn" cx="496.3" cy="805.3" r="2.1"/><circle class="stn" cx="465.7" cy="862.2" r="2.1"/><circle class="stn" cx="450" cy="910" r="2.1"/><text class="stn-lbl" x="644.3" y="581.6"
+      text-anchor="start">Chicago Union Station</text><text class="stn-lbl" x="609.7" y="675.2"
+      text-anchor="start">Wrightwood</text><text class="stn-lbl" x="604.9" y="680.4"
+      text-anchor="start">Ashburn</text><text class="stn-lbl" x="585.6" y="696.4"
+      text-anchor="start">Oak Lawn Patriot</text><text class="stn-lbl" x="568.7" y="707.9"
+      text-anchor="start">Chicago Ridge</text><text class="stn-lbl" x="560.3" y="716.5"
+      text-anchor="start">Worth</text><text class="stn-lbl" x="554.4" y="723.3"
+      text-anchor="start">Palos Heights</text><text class="stn-lbl" x="547.3" y="732.7"
+      text-anchor="start">Palos Park</text><text class="stn-lbl" x="526.5" y="760.3"
+      text-anchor="start">Orland Park 143rd</text><text class="stn-lbl" x="518.9" y="775.5"
+      text-anchor="start">Orland Park 153rd</text><text class="stn-lbl" x="503.3" y="808.3"
+      text-anchor="start">Orland Park 179th</text><text class="stn-lbl" x="472.7" y="865.2"
+      text-anchor="start">Laraway Road</text><text class="stn-lbl" x="457" y="913"
+      text-anchor="start">Manhattan</text>
+    <text class="term" x="459" y="913.5" text-anchor="start">Manhattan</text>
+  </g>
+<g class="line" data-id="UP-N" data-name="Union Pacific North" style="--c:#008000">
+    <path class="hit" d="M 636.4,576.2 L 621.7,551.3 L 618.2,514.3 L 618,497.9 L 617.7,484.7 L 615.3,467.5 L 612.8,456.9 L 605.6,445.3 L 599.7,435.9 L 595.7,429.3 L 591.8,423.5 L 587.1,415.8 L 581.3,406.6 L 573.5,394 L 565.8,381.6 L 563.4,377.8 L 560.3,372.8 L 552.5,359.6 L 545.5,345.2 L 540,335 L 529.9,309.8 L 526.2,290.2 L 526.3,270.7 L 531.4,255.1 L 536,232.1 L 541.5,168.3 L 542.5,144.1 L 537.3,70"/>
+    <path class="glow" d="M 636.4,576.2 L 621.7,551.3 L 618.2,514.3 L 618,497.9 L 617.7,484.7 L 615.3,467.5 L 612.8,456.9 L 605.6,445.3 L 599.7,435.9 L 595.7,429.3 L 591.8,423.5 L 587.1,415.8 L 581.3,406.6 L 573.5,394 L 565.8,381.6 L 563.4,377.8 L 560.3,372.8 L 552.5,359.6 L 545.5,345.2 L 540,335 L 529.9,309.8 L 526.2,290.2 L 526.3,270.7 L 531.4,255.1 L 536,232.1 L 541.5,168.3 L 542.5,144.1 L 537.3,70"/>
+    <path class="core" d="M 636.4,576.2 L 621.7,551.3 L 618.2,514.3 L 618,497.9 L 617.7,484.7 L 615.3,467.5 L 612.8,456.9 L 605.6,445.3 L 599.7,435.9 L 595.7,429.3 L 591.8,423.5 L 587.1,415.8 L 581.3,406.6 L 573.5,394 L 565.8,381.6 L 563.4,377.8 L 560.3,372.8 L 552.5,359.6 L 545.5,345.2 L 540,335 L 529.9,309.8 L 526.2,290.2 L 526.3,270.7 L 531.4,255.1 L 536,232.1 L 541.5,168.3 L 542.5,144.1 L 537.3,70"/>
+    <circle class="stn" cx="636.4" cy="576.2" r="2.1"/><circle class="stn" cx="621.7" cy="551.3" r="2.1"/><circle class="stn" cx="618.2" cy="514.3" r="2.1"/><circle class="stn" cx="618" cy="497.9" r="2.1"/><circle class="stn" cx="617.7" cy="484.7" r="2.1"/><circle class="stn" cx="615.3" cy="467.5" r="2.1"/><circle class="stn" cx="612.8" cy="456.9" r="2.1"/><circle class="stn" cx="605.6" cy="445.3" r="2.1"/><circle class="stn" cx="599.7" cy="435.9" r="2.1"/><circle class="stn" cx="595.7" cy="429.3" r="2.1"/><circle class="stn" cx="591.8" cy="423.5" r="2.1"/><circle class="stn" cx="587.1" cy="415.8" r="2.1"/><circle class="stn" cx="581.3" cy="406.6" r="2.1"/><circle class="stn" cx="573.5" cy="394" r="2.1"/><circle class="stn" cx="565.8" cy="381.6" r="2.1"/><circle class="stn" cx="563.4" cy="377.8" r="2.1"/><circle class="stn" cx="560.3" cy="372.8" r="2.1"/><circle class="stn" cx="552.5" cy="359.6" r="2.1"/><circle class="stn" cx="545.5" cy="345.2" r="2.1"/><circle class="stn" cx="540" cy="335" r="2.1"/><circle class="stn" cx="529.9" cy="309.8" r="2.1"/><circle class="stn" cx="526.2" cy="290.2" r="2.1"/><circle class="stn" cx="526.3" cy="270.7" r="2.1"/><circle class="stn" cx="531.4" cy="255.1" r="2.1"/><circle class="stn" cx="536" cy="232.1" r="2.1"/><circle class="stn" cx="541.5" cy="168.3" r="2.1"/><circle class="stn" cx="542.5" cy="144.1" r="2.1"/><circle class="stn" cx="537.3" cy="70" r="2.1"/><text class="stn-lbl" x="643.4" y="579.2"
+      text-anchor="start">Chicago OTC</text><text class="stn-lbl" x="628.7" y="554.3"
+      text-anchor="start">Clybourn</text><text class="stn-lbl" x="625.2" y="517.3"
+      text-anchor="start">Ravenswood</text><text class="stn-lbl" x="625" y="500.9"
+      text-anchor="start">Peterson/Ridge</text><text class="stn-lbl" x="624.7" y="487.7"
+      text-anchor="start">Rogers Park</text><text class="stn-lbl" x="622.3" y="470.5"
+      text-anchor="start">Main St.</text><text class="stn-lbl" x="619.8" y="459.9"
+      text-anchor="start">Evanston (Davis St.)</text><text class="stn-lbl" x="612.6" y="448.3"
+      text-anchor="start">Central St.</text><text class="stn-lbl" x="606.7" y="438.9"
+      text-anchor="start">Wilmette</text><text class="stn-lbl" x="602.7" y="432.3"
+      text-anchor="start">Kenilworth</text><text class="stn-lbl" x="598.8" y="426.5"
+      text-anchor="start">Indian Hill</text><text class="stn-lbl" x="594.1" y="418.8"
+      text-anchor="start">Winnetka</text><text class="stn-lbl" x="588.3" y="409.6"
+      text-anchor="start">Hubbard Woods</text><text class="stn-lbl" x="580.5" y="397"
+      text-anchor="start">Glencoe</text><text class="stn-lbl" x="572.8" y="384.6"
+      text-anchor="start">Braeside</text><text class="stn-lbl" x="570.4" y="380.8"
+      text-anchor="start">Ravinia Park</text><text class="stn-lbl" x="567.3" y="375.8"
+      text-anchor="start">Ravinia</text><text class="stn-lbl" x="559.5" y="362.6"
+      text-anchor="start">Highland Park</text><text class="stn-lbl" x="552.5" y="348.2"
+      text-anchor="start">Highwood</text><text class="stn-lbl" x="547" y="338"
+      text-anchor="start">Fort Sheridan</text><text class="stn-lbl" x="536.9" y="312.8"
+      text-anchor="start">Lake Forest.</text><text class="stn-lbl" x="533.2" y="293.2"
+      text-anchor="start">Lake Bluff</text><text class="stn-lbl" x="533.3" y="273.7"
+      text-anchor="start">Great Lakes</text><text class="stn-lbl" x="538.4" y="258.1"
+      text-anchor="start">North Chicago</text><text class="stn-lbl" x="543" y="235.1"
+      text-anchor="start">Waukegan</text><text class="stn-lbl" x="548.5" y="171.3"
+      text-anchor="start">Zion</text><text class="stn-lbl" x="549.5" y="147.1"
+      text-anchor="start">Winthrop Harbor</text><text class="stn-lbl" x="544.3" y="73"
+      text-anchor="start">Kenosha</text>
+    <text class="term" x="546.3" y="73.5" text-anchor="start">Kenosha</text>
+  </g>
+<g class="line" data-id="UP-NW" data-name="Union Pacific Northwest" style="--c:#FFE600">
+    <path class="hit" d="M 636.4,576.2 L 621.7,551.3 L 588.7,525.7 L 570.7,512.1 L 562.8,506.1 L 551.7,497.5 L 541.8,489.9 L 534.2,484.1 L 521.1,474.1 L 504.8,462.1 L 491.1,453.7 L 478.3,446.1 L 452.9,430.9 L 439.3,422.9 L 418.3,410.2 L 373.6,381.6 L 326.9,349.2 L 315.1,341.2 L 284.8,323 L 296.6,244.5 L 274.6,315.8 L 204.9,263.5 L 114,189.5"/>
+    <path class="glow" d="M 636.4,576.2 L 621.7,551.3 L 588.7,525.7 L 570.7,512.1 L 562.8,506.1 L 551.7,497.5 L 541.8,489.9 L 534.2,484.1 L 521.1,474.1 L 504.8,462.1 L 491.1,453.7 L 478.3,446.1 L 452.9,430.9 L 439.3,422.9 L 418.3,410.2 L 373.6,381.6 L 326.9,349.2 L 315.1,341.2 L 284.8,323 L 296.6,244.5 L 274.6,315.8 L 204.9,263.5 L 114,189.5"/>
+    <path class="core" d="M 636.4,576.2 L 621.7,551.3 L 588.7,525.7 L 570.7,512.1 L 562.8,506.1 L 551.7,497.5 L 541.8,489.9 L 534.2,484.1 L 521.1,474.1 L 504.8,462.1 L 491.1,453.7 L 478.3,446.1 L 452.9,430.9 L 439.3,422.9 L 418.3,410.2 L 373.6,381.6 L 326.9,349.2 L 315.1,341.2 L 284.8,323 L 296.6,244.5 L 274.6,315.8 L 204.9,263.5 L 114,189.5"/>
+    <circle class="stn" cx="636.4" cy="576.2" r="2.1"/><circle class="stn" cx="621.7" cy="551.3" r="2.1"/><circle class="stn" cx="588.7" cy="525.7" r="2.1"/><circle class="stn" cx="570.7" cy="512.1" r="2.1"/><circle class="stn" cx="562.8" cy="506.1" r="2.1"/><circle class="stn" cx="551.7" cy="497.5" r="2.1"/><circle class="stn" cx="541.8" cy="489.9" r="2.1"/><circle class="stn" cx="534.2" cy="484.1" r="2.1"/><circle class="stn" cx="521.1" cy="474.1" r="2.1"/><circle class="stn" cx="504.8" cy="462.1" r="2.1"/><circle class="stn" cx="491.1" cy="453.7" r="2.1"/><circle class="stn" cx="478.3" cy="446.1" r="2.1"/><circle class="stn" cx="452.9" cy="430.9" r="2.1"/><circle class="stn" cx="439.3" cy="422.9" r="2.1"/><circle class="stn" cx="418.3" cy="410.2" r="2.1"/><circle class="stn" cx="373.6" cy="381.6" r="2.1"/><circle class="stn" cx="326.9" cy="349.2" r="2.1"/><circle class="stn" cx="315.1" cy="341.2" r="2.1"/><circle class="stn" cx="284.8" cy="323" r="2.1"/><circle class="stn" cx="296.6" cy="244.5" r="2.1"/><circle class="stn" cx="274.6" cy="315.8" r="2.1"/><circle class="stn" cx="204.9" cy="263.5" r="2.1"/><circle class="stn" cx="114" cy="189.5" r="2.1"/><text class="stn-lbl" x="643.4" y="579.2"
+      text-anchor="start">Chicago OTC</text><text class="stn-lbl" x="628.7" y="554.3"
+      text-anchor="start">Clybourn</text><text class="stn-lbl" x="595.7" y="528.7"
+      text-anchor="start">Irving Park</text><text class="stn-lbl" x="577.7" y="515.1"
+      text-anchor="start">Jefferson Park</text><text class="stn-lbl" x="569.8" y="509.1"
+      text-anchor="start">Gladstone Park</text><text class="stn-lbl" x="558.7" y="500.5"
+      text-anchor="start">Norwood Park</text><text class="stn-lbl" x="548.8" y="492.9"
+      text-anchor="start">Edison Park</text><text class="stn-lbl" x="541.2" y="487.1"
+      text-anchor="start">Park Ridge</text><text class="stn-lbl" x="528.1" y="477.1"
+      text-anchor="start">Dee Road</text><text class="stn-lbl" x="511.8" y="465.1"
+      text-anchor="start">Des Plaines</text><text class="stn-lbl" x="498.1" y="456.7"
+      text-anchor="start">Cumberland</text><text class="stn-lbl" x="485.3" y="449.1"
+      text-anchor="start">Mt. Prospect</text><text class="stn-lbl" x="459.9" y="433.9"
+      text-anchor="start">Arlington Heights</text><text class="stn-lbl" x="446.3" y="425.9"
+      text-anchor="start">Arlington Park</text><text class="stn-lbl" x="425.3" y="413.2"
+      text-anchor="start">Palatine</text><text class="stn-lbl" x="380.6" y="384.6"
+      text-anchor="start">Barrington</text><text class="stn-lbl" x="333.9" y="352.2"
+      text-anchor="start">Fox River Grove</text><text class="stn-lbl" x="322.1" y="344.2"
+      text-anchor="start">Cary</text><text class="stn-lbl" x="291.8" y="326"
+      text-anchor="start">Pingree Road</text><text class="stn-lbl" x="303.6" y="247.5"
+      text-anchor="start">McHenry</text><text class="stn-lbl" x="281.6" y="318.8"
+      text-anchor="start">Crystal Lake</text><text class="stn-lbl" x="211.9" y="266.5"
+      text-anchor="start">Woodstock</text><text class="stn-lbl" x="121" y="192.5"
+      text-anchor="start">Harvard</text>
+    <text class="term" x="123" y="193" text-anchor="start">Harvard</text>
+  </g>
+<g class="line" data-id="UP-W" data-name="Union Pacific West" style="--c:#FE8D81">
+    <path class="hit" d="M 636.4,576.2 L 600.9,571.8 L 550.5,572.8 L 537.8,572.8 L 530.5,571.8 L 521.4,570.4 L 507,569.6 L 489.5,566.2 L 475.8,563.6 L 456.2,566 L 434.2,573 L 409.6,580.2 L 395.9,586.2 L 384.3,589 L 360.3,585 L 337.8,577 L 278.4,576.6 L 223.8,573 L 196.2,570.2"/>
+    <path class="glow" d="M 636.4,576.2 L 600.9,571.8 L 550.5,572.8 L 537.8,572.8 L 530.5,571.8 L 521.4,570.4 L 507,569.6 L 489.5,566.2 L 475.8,563.6 L 456.2,566 L 434.2,573 L 409.6,580.2 L 395.9,586.2 L 384.3,589 L 360.3,585 L 337.8,577 L 278.4,576.6 L 223.8,573 L 196.2,570.2"/>
+    <path class="core" d="M 636.4,576.2 L 600.9,571.8 L 550.5,572.8 L 537.8,572.8 L 530.5,571.8 L 521.4,570.4 L 507,569.6 L 489.5,566.2 L 475.8,563.6 L 456.2,566 L 434.2,573 L 409.6,580.2 L 395.9,586.2 L 384.3,589 L 360.3,585 L 337.8,577 L 278.4,576.6 L 223.8,573 L 196.2,570.2"/>
+    <circle class="stn" cx="636.4" cy="576.2" r="2.1"/><circle class="stn" cx="600.9" cy="571.8" r="2.1"/><circle class="stn" cx="550.5" cy="572.8" r="2.1"/><circle class="stn" cx="537.8" cy="572.8" r="2.1"/><circle class="stn" cx="530.5" cy="571.8" r="2.1"/><circle class="stn" cx="521.4" cy="570.4" r="2.1"/><circle class="stn" cx="507" cy="569.6" r="2.1"/><circle class="stn" cx="489.5" cy="566.2" r="2.1"/><circle class="stn" cx="475.8" cy="563.6" r="2.1"/><circle class="stn" cx="456.2" cy="566" r="2.1"/><circle class="stn" cx="434.2" cy="573" r="2.1"/><circle class="stn" cx="409.6" cy="580.2" r="2.1"/><circle class="stn" cx="395.9" cy="586.2" r="2.1"/><circle class="stn" cx="384.3" cy="589" r="2.1"/><circle class="stn" cx="360.3" cy="585" r="2.1"/><circle class="stn" cx="337.8" cy="577" r="2.1"/><circle class="stn" cx="278.4" cy="576.6" r="2.1"/><circle class="stn" cx="223.8" cy="573" r="2.1"/><circle class="stn" cx="196.2" cy="570.2" r="2.1"/><text class="stn-lbl" x="643.4" y="579.2"
+      text-anchor="start">Chicago OTC</text><text class="stn-lbl" x="607.9" y="574.8"
+      text-anchor="start">Kedzie</text><text class="stn-lbl" x="557.5" y="575.8"
+      text-anchor="start">Oak Park</text><text class="stn-lbl" x="544.8" y="575.8"
+      text-anchor="start">River Forest</text><text class="stn-lbl" x="537.5" y="574.8"
+      text-anchor="start">Maywood</text><text class="stn-lbl" x="528.4" y="573.4"
+      text-anchor="start">Melrose Park</text><text class="stn-lbl" x="514" y="572.6"
+      text-anchor="start">Bellwood</text><text class="stn-lbl" x="496.5" y="569.2"
+      text-anchor="start">Berkeley</text><text class="stn-lbl" x="482.8" y="566.6"
+      text-anchor="start">Elmhurst</text><text class="stn-lbl" x="463.2" y="569"
+      text-anchor="start">Villa Park</text><text class="stn-lbl" x="441.2" y="576"
+      text-anchor="start">Lombard</text><text class="stn-lbl" x="416.6" y="583.2"
+      text-anchor="start">Glen Ellyn</text><text class="stn-lbl" x="402.9" y="589.2"
+      text-anchor="start">College Ave</text><text class="stn-lbl" x="391.3" y="592"
+      text-anchor="start">Wheaton</text><text class="stn-lbl" x="367.3" y="588"
+      text-anchor="start">Winfield</text><text class="stn-lbl" x="344.8" y="580"
+      text-anchor="start">West Chicago</text><text class="stn-lbl" x="285.4" y="579.6"
+      text-anchor="start">Geneva</text><text class="stn-lbl" x="230.8" y="576"
+      text-anchor="start">La Fox</text><text class="stn-lbl" x="203.2" y="573.2"
+      text-anchor="start">Elburn</text>
+    <text class="term" x="205.2" y="573.7" text-anchor="start">Elburn</text>
+  </g>
+  <g id="train" style="--tc:#2FD53B">
+    <circle id="train-halo" r="9"/>
+    <circle id="train-dot" r="4.2"/>
+    <text id="train-lbl" dx="10" dy="-8">1284</text>
+  </g>
+  <circle class="hub" cx="637.3" cy="578.6" r="5.5"/>
+  <text class="hub-lbl" x="649.3" y="582.6">CHICAGO</text>
+</svg>
+</div>
+<div class="dock">
+  <div class="dock-card">
+    <div>
+      <div class="dock-time">7:42</div>
+      <div class="dock-meta"><b>Express 1284</b> · Naperville → Union Station</div>
+    </div>
+    <div class="dock-count" id="count">12:08<small>until departure</small></div>
+  </div>
+</div>
+<script>
+  // ---- tap-to-focus: the onboarding gesture ----
+  const svg = document.getElementById("map"), chip = document.getElementById("focus-chip");
+  svg.querySelectorAll(".line").forEach(g => {
+    g.querySelector(".hit").addEventListener("click", e => {
+      e.stopPropagation();
+      svg.querySelectorAll(".line.on").forEach(x => x.classList.remove("on"));
+      g.classList.add("on"); svg.classList.add("focus");
+      chip.style.display = "block";
+      chip.querySelector("i").style.background = getComputedStyle(g).getPropertyValue("--c");
+      document.getElementById("chip-name").textContent = g.dataset.id + " · " + g.dataset.name;
+    });
+  });
+  svg.addEventListener("click", () => {
+    svg.classList.remove("focus");
+    svg.querySelectorAll(".line.on").forEach(x => x.classList.remove("on"));
+    chip.style.display = "none";
+  });
+
+  // ---- demo train: glides along the real BNSF geometry ----
+  const pts = [[637.3,578.6],[632.8,592],[612.5,593.8],[580.2,603.6],[560,609.8],[554.5,611.6],[550.1,612.8],[540.4,615.8],[533,617.8],[528.1,619.6],[520.4,621.8],[513.1,624],[509.2,625.2],[497.1,629],[487.8,631.8],[482.5,633.4],[473.4,636.2],[469,637.6],[456.8,638.6],[447.6,638.8],[439,638.8],[423.8,638.8],[405.7,637],[366.4,650],[332.6,651.4],[279.3,663.6]];
+  const seg = []; let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const d = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
+    seg.push(d); total += d;
+  }
+  const train = document.getElementById("train");
+  const DUR = 60000; // one end-to-end run per minute
+  function at(dist) {
+    let i = 0; while (i < seg.length && dist > seg[i]) dist -= seg[i++];
+    if (i >= seg.length) return pts.at(-1);
+    const t = seg[i] ? dist / seg[i] : 0;
+    return [pts[i][0] + (pts[i+1][0]-pts[i][0])*t, pts[i][1] + (pts[i+1][1]-pts[i][1])*t];
+  }
+  function tick(now) {
+    const phase = (now % (DUR*2)) / DUR;         // out and back
+    const f = phase <= 1 ? phase : 2 - phase;
+    const [x, y] = at(f * total);
+    train.setAttribute("transform", "translate(" + x + "," + y + ")");
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // ---- live-feeling countdown in the dock ----
+  let secs = 12*60 + 8;
+  setInterval(() => {
+    secs = secs > 0 ? secs - 1 : 12*60 + 8;
+    document.getElementById("count").childNodes[0].textContent =
+      Math.floor(secs/60) + ":" + String(secs%60).padStart(2,"0");
+  }, 1000);
+</script>
+</body>
+</html>
