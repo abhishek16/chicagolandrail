@@ -1,25 +1,21 @@
 :root {
-  --bg: #F4F6F8;                 /* cool neutral canvas */
-  --surface: #FFFFFF;
-  --text: #101828;               /* slate ink */
-  --muted: #667085;
-  --border: #E4E7EC;
-  --line: #005A45;               /* replaced at runtime with the route's official color */
-  --express: #B45309;
-  --green: #1D9E75;
-  --amber: #B45309;
-  --red: #B3261E;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-md: 0 6px 18px rgba(16, 24, 40, 0.08);
+  /* Dark-first "Living Map" identity — one world across onboarding, board,
+     schedule, and settings (no light/dark split; the app is dark by design). */
+  color-scheme: dark;
+  --bg: #0A0F15;                 /* deep station-at-night canvas */
+  --surface: #121A24;            /* cards lifted off the canvas */
+  --text: #E9EDF2;
+  --muted: #8B97A5;
+  --border: #243040;
+  --line: #22C58B;               /* replaced at runtime with the route's official color (lifted) */
+  --line-ink: #08141F;           /* text that sits on a --line fill; set with --line at runtime */
+  --express: #F0A63C;
+  --green: #39D98A;
+  --amber: #F0A63C;
+  --red: #FF6B61;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.55);
   --board: "Overpass Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0E1116; --surface: #161A20; --text: #E6E8EB;
-    --muted: #98A2B3; --border: #262C35;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
-  }
 }
 * { box-sizing: border-box; margin: 0; }
 button, select, input { touch-action: manipulation; font: inherit; }
@@ -93,7 +89,7 @@ h1 .arrow { color: var(--line); }
 }
 .seg button:not(.on):hover { color: var(--text); }
 .seg button.on {
-  background: var(--line); color: #fff; font-weight: 600;
+  background: var(--line); color: var(--line-ink); font-weight: 600;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
@@ -101,17 +97,30 @@ h1 .arrow { color: var(--line); }
 #alerts { padding: 0; }
 .alert {
   display: flex; gap: 10px; padding: 10px 16px; font-size: 13px;
-  background: #FDF3E7; color: #7A4200; border-bottom: 1px solid #F0DFC2;
+  background: #33280F; color: #F2C766; border-bottom: 1px solid #46370F;
 }
 .alert::before { content: "⚠"; }
-.alert.severe { background: #FBEAE9; color: #7A1410; border-bottom-color: #F0C9C6; }
-@media (prefers-color-scheme: dark) {
-  .alert { background: #3A2C12; color: #F0C060; border-bottom-color: #4A3A18; }
-  .alert.severe { background: #3E1A18; color: #F2A09A; border-bottom-color: #582522; }
-}
-.banner { padding: 9px 16px; font-size: 13px; background: #FFF7E6; color: #7A4D00; border-bottom: 1px solid #F0E0BE; }
+.alert.severe { background: #3E1A18; color: #F5A79F; border-bottom-color: #582522; }
+.banner { padding: 9px 16px; font-size: 13px; background: #33290F; color: #F2C766; border-bottom: 1px solid #46370F; }
 .banner.offline { background: transparent; color: var(--muted); border-bottom: 1px solid var(--border); }
-@media (prefers-color-scheme: dark) { .banner { background: #3A2E12; color: #F0C060; border-bottom-color: #4A3A18; } }
+
+/* ---- live board: geographic route map with the rider's train ---- */
+.board-map {
+  margin: 12px 16px 0; border-radius: 16px; overflow: hidden;
+  background: #0A0F15; border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+}
+.board-map .lmap { max-height: 32vh; }
+/* a single-line map: drop the lake + downtown hub, and label only the rider's
+   two stations (all-station labels are too dense at board size) */
+.board-map .lmap-lake, .board-map .lmap-hub, .board-map .lmap-hub-lbl { display: none; }
+.board-map .lmap.focus .lmap-line.on .lmap-lbl { display: none; }
+.board-map .lmap .lmap-lbl.pick { display: block; }
+.board-map-cap {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 7px 12px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border);
+}
+.board-map-cap .bm-live { color: var(--green); font-weight: 600; }
+.board-map-cap .bm-sched { color: var(--muted); }
 
 /* ---- content ---- */
 main#content { padding: 16px; flex: 1; }
@@ -156,7 +165,7 @@ main#content { padding: 16px; flex: 1; }
   display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
   padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
 }
-.chip.E { background: var(--express); color: #fff; }
+.chip.E { background: var(--express); color: #241203; }  /* dark ink reads on amber */
 .chip.L { background: var(--border); color: var(--muted); }
 /* hero head: content left, countdown badge top-right */
 .hero-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
@@ -223,10 +232,10 @@ main#content { padding: 16px; flex: 1; }
   width: 6px; height: 6px; border-radius: 50%; display: inline-block; background: currentColor;
   animation: pulse 1.6s ease-in-out infinite;
 }
-.st-ontime { color: var(--green); background: rgba(29, 158, 117, 0.14); }
-.st-late { color: var(--amber); background: rgba(180, 83, 9, 0.15); }
+.st-ontime { color: var(--green); background: rgba(57, 217, 138, 0.15); }
+.st-late { color: var(--amber); background: rgba(240, 166, 60, 0.16); }
 .st-sched { color: var(--muted); background: var(--border); }
-.st-cancel { color: var(--red); background: rgba(179, 38, 30, 0.14); }
+.st-cancel { color: var(--red); background: rgba(255, 107, 97, 0.16); }
 .mini-status { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; }
 .mini-status.st-ontime { color: var(--green); }
 .mini-status.st-late { color: var(--amber); }
@@ -260,7 +269,7 @@ main#content { padding: 16px; flex: 1; }
   transition: background 0.15s, color 0.15s;
 }
 .chip-day:hover:not(.on) { color: var(--text); }
-.chip-day.on { background: var(--line); border-color: var(--line); color: #fff; font-weight: 600; }
+.chip-day.on { background: var(--line); border-color: var(--line); color: var(--line-ink); font-weight: 600; }
 
 /* ---- X (twitter) service updates ---- */
 #social { padding: 0 16px 4px; }
@@ -285,7 +294,7 @@ details.social summary a { color: var(--line); text-decoration: none; }
 /* Express trains get a warm accent bar + tint so they pop in the timetable. */
 .list.tt .row.express {
   box-shadow: inset 3px 0 0 var(--express);
-  background: linear-gradient(90deg, rgba(180, 83, 9, 0.09), rgba(180, 83, 9, 0));
+  background: linear-gradient(90deg, rgba(240, 166, 60, 0.12), rgba(240, 166, 60, 0));
   padding-left: 10px;
 }
 .list.tt .row.express .dep { color: var(--express); }
@@ -380,7 +389,7 @@ label .cs { margin-top: 5px; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cs-opt:hover { background: var(--bg); }
-.cs-opt.sel { background: var(--line); color: #fff; }
+.cs-opt.sel { background: var(--line); color: var(--line-ink); }
 .cs-opt.cs-empty { color: var(--muted); cursor: default; }
 
 /* compact variant in the sticky header (route switcher) */
@@ -402,7 +411,7 @@ label .cs { margin-top: 5px; }
   max-width: min(300px, calc(100vw - 32px));
 }
 button.primary {
-  background: var(--line); color: #fff; border: none; border-radius: 10px;
+  background: var(--line); color: var(--line-ink); border: none; border-radius: 10px;
   padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
   transition: transform 0.1s, filter 0.15s;
 }
@@ -415,12 +424,12 @@ button.ghost {
 }
 button.ghost:active { transform: scale(0.98); }
 button.ghost.danger { color: var(--red); }
-button.ghost.danger.confirm { background: var(--red); border-color: var(--red); color: #fff; }
+button.ghost.danger.confirm { background: #C0392B; border-color: #C0392B; color: #fff; }
 button.ghost.wide { width: 100%; padding: 11px; font-size: 14px; font-weight: 500; color: var(--text); }
 button.ghost.wide:hover { border-color: var(--line); }
 button.ghost.wide.danger { color: var(--red); }
 button.ghost.wide.danger:hover { border-color: var(--red); }
-button.ghost.wide.danger.confirm { background: var(--red); border-color: var(--red); color: #fff; }
+button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; color: #fff; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .actions { margin: 26px 0 30px; display: flex; align-items: center; gap: 12px; }
 .route-item {

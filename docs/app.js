@@ -1,8 +1,24 @@
 import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown } from "./logic.js";
 import { API_BASE, CF_ANALYTICS_TOKEN } from "./config.js";
-import { createMap } from "./map.js";
+import { createMap, lift } from "./map.js";
 
 const WIZ_LINE = "#22C58B"; // bright default accent for the dark onboarding (before a line is picked)
+
+// Relative luminance of a #rrggbb color (0 dark … 1 light).
+function relLum(hex) {
+  const n = parseInt(String(hex).replace("#", ""), 16);
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(n >> 16 & 255) + 0.7152 * f(n >> 8 & 255) + 0.0722 * f(n & 255);
+}
+// Theme the UI to a line: lift the official color for contrast on the dark canvas,
+// and choose ink (text that sits ON a --line fill) that stays readable — dark ink
+// on bright lines (UP-NW yellow), white on the rest.
+function applyLineTheme(rawColor) {
+  const c = lift(rawColor || WIZ_LINE);
+  const root = document.documentElement.style;
+  root.setProperty("--line", c);
+  root.setProperty("--line-ink", relLum(c) > 0.62 ? "#08141F" : "#FFFFFF");
+}
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 30000;
@@ -30,6 +46,7 @@ let expandedStops = {};          // direction -> whether the hero's stop list is
 let meta = null;                 // /api/meta freshness, for the stale-data warning
 let weatherCache = new Map();    // stationId -> { periods, at }
 let oneOff = null;               // transient one-off trip (not saved), overrides active route
+let boardMap = null, boardMapLine = null, boardStops = {}; // live-board route map + per-line geometry cache
 let ooStations = [];             // stations for the one-off line picker
 
 // ---------- persistent offline cache (survives reload/underground) ----------
@@ -460,7 +477,7 @@ function showWizard(cameFrom = "boot") {
   wiz = { step: 1, cameFrom, sts: [] };
   wizMap = null;
   swapView("wizard");
-  document.documentElement.style.setProperty("--line", WIZ_LINE);
+  applyLineTheme(WIZ_LINE);
   buildWizMap();   // async: draws the map when geometry arrives
   renderWizard();
 }
@@ -501,7 +518,7 @@ function wizBack() {
   if (wiz.step === 3) { wiz.from = null; wiz.step = 2; return renderWizard(); }
   if (wiz.step === 2) {
     wiz.line = null; wiz.step = 1;
-    document.documentElement.style.setProperty("--line", WIZ_LINE);
+    applyLineTheme(WIZ_LINE);
     return renderWizard();
   }
   // step 1 → leave the wizard if there's somewhere to go back to
@@ -580,7 +597,7 @@ async function pickWizLine(id) {
   wiz.line = id;
   wiz.from = null;
   wiz.step = 2;
-  if (l) document.documentElement.style.setProperty("--line", wizMap ? wizMap.lift(l.color) : l.color);
+  if (l) applyLineTheme(l.color);
   const cached = mapGeo && mapGeo.stopsByLine[id];
   if (cached && cached.length) { wiz.sts = cached; wiz.loading = false; return renderWizard(); }
   wiz.loading = true;
@@ -788,7 +805,7 @@ function closeOneOff() { $("#oo-modal").classList.add("hidden"); }
 function showMain() {
   swapView("main");
   const route = activeRoute();
-  document.documentElement.style.setProperty("--line", lineColor(route.line));
+  applyLineTheme(lineColor(route.line));
   $("#route-picker").innerHTML =
     (oneOff ? `<option value="__oneoff" selected>One-off: ${esc(oneOff.label)}</option>` : "") +
     S.routes.map(r => `<option value="${r.id}" ${!oneOff && r.id === route.id ? "selected" : ""}>${esc(r.label)}</option>`).join("");
@@ -825,9 +842,8 @@ function renderSocial(route) {
 
 function loadTimeline(det, handle) {
   const body = det.querySelector(".social-body");
-  const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   body.innerHTML = `
-    <a class="twitter-timeline" data-height="460" data-theme="${dark ? "dark" : "light"}"
+    <a class="twitter-timeline" data-height="460" data-theme="dark"
        data-chrome="noheader nofooter transparent"
        href="https://twitter.com/${handle}?ref_src=twsrc%5Etfw">Posts by @${handle}</a>
     <p class="muted small social-fallback">Updates not showing? <a href="https://x.com/${handle}" target="_blank" rel="noopener">Open @${handle} on X →</a></p>`;
@@ -971,6 +987,7 @@ function render(dirs, offline) {
     };
   });
 
+  updateBoardMap(dirs);      // geographic route map with the live train position
   dirs.forEach(loadWeather); // fill the weather line under each hero (async, optional)
   renderNudge();             // contextual feature discovery (alerts, briefing)
   maybeStartTour();          // first board ever → skippable coach-mark walkthrough
@@ -983,8 +1000,62 @@ function render(dirs, offline) {
   $("#rt-status").innerHTML = first ? (first.realtime ? `<span class="live-dot">live</span>` : "scheduled only") : "";
 }
 
+// Geographic route map on the live board: the rider's line with their two
+// stations marked and the next train shown at its live GPS position when Metra's
+// positions feed is tracking it. Built once per line; only the dot updates on poll.
+// Reuses the existing /api/next payload — no extra Metra calls.
+async function updateBoardMap(dirs) {
+  const host = $("#board-map");
+  const route = activeRoute();
+  if (!host) return;
+  if (ttDate || !route) { host.classList.add("hidden"); return; }
+
+  const seq = reqSeq;
+  let stops = boardStops[route.line];
+  if (!stops) {
+    try { stops = (await api(`/api/stops?route=${encodeURIComponent(route.line)}`)).stations; }
+    catch { host.classList.add("hidden"); return; }
+    if (seq !== reqSeq || activeRoute() !== route || ttDate) return; // route/view changed while loading
+    boardStops[route.line] = stops;
+  }
+  const geo = (stops || []).filter(s => s.lat != null && s.lon != null);
+  if (geo.length < 2) { host.classList.add("hidden"); return; }
+
+  if (boardMapLine !== route.line || !boardMap) {
+    const l = lines.find(x => x.id === route.line) || { id: route.line, name: route.line, color: lineColor(route.line) };
+    try {
+      boardMap = createMap(host, { lines: [l], stopsByLine: { [route.line]: geo }, onLine: () => {}, onStation: () => {} });
+    } catch { host.classList.add("hidden"); boardMap = null; return; }
+    boardMap.focus(route.line);
+    boardMapLine = route.line;
+  }
+  host.classList.remove("hidden");
+  boardMap.select(route.line, { from: route.home, to: route.work });
+
+  // Train dots: only where the positions feed is actually tracking the next train.
+  const dots = []; let anyLive = false;
+  for (const d of dirs) {
+    const data = lastData[d];
+    if (!data || !data.position || data.position.lat == null) continue;
+    const nx = (data.trains || []).find(t => !t.cancelled && data.position.tripId === t.tripId);
+    if (nx) { dots.push({ lat: data.position.lat, lon: data.position.lon }); anyLive = true; }
+  }
+  boardMap.setTrains(route.line, dots);
+
+  let cap = host.querySelector(".board-map-cap");
+  if (!cap) { cap = document.createElement("div"); cap.className = "board-map-cap"; host.appendChild(cap); }
+  cap.innerHTML = anyLive
+    ? `<span class="bm-live">● live train position</span><span>${esc(lineLabelShort(route))}</span>`
+    : `<span class="bm-sched">${esc(route.homeName)} → ${esc(route.workName)}</span><span>${esc(lineLabelShort(route))}</span>`;
+}
+function lineLabelShort(route) {
+  const l = lines.find(x => x.id === route.line);
+  return l ? `${l.id}` : route.line;
+}
+
 // Full-day scheduled timetable for any date (incl. weekends) — no realtime merge.
 async function renderTimetable(dirs, seq = reqSeq) {
+  $("#board-map").classList.add("hidden"); // schedule view has no live map
   const route = activeRoute();
   $("#route-title").innerHTML = dirs.length === 2
     ? `${esc(route.homeName)} <span class="arrow">⇆</span> ${esc(route.workName)}`

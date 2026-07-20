@@ -23,7 +23,7 @@ const r1 = n => Math.round(n * 10) / 10;
 
 // Low-luminance official colors (Heritage maroon, deep blues) get lifted so they
 // read against the dark water without losing their identity.
-function lift(hex) {
+export function lift(hex) {
   const n = parseInt(String(hex).replace("#", ""), 16);
   const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
   const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
