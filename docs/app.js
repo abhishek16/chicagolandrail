@@ -1,5 +1,8 @@
 import { DEFAULT_SETTINGS, resolveDirection, overrideExpiry, expressHint, fmtCountdown } from "./logic.js";
 import { API_BASE, CF_ANALYTICS_TOKEN } from "./config.js";
+import { createMap } from "./map.js";
+
+const WIZ_LINE = "#22C58B"; // bright default accent for the dark onboarding (before a line is picked)
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 30000;
@@ -435,23 +438,70 @@ async function resetApp() {
 }
 
 // ============================================================
-// ONBOARDING WIZARD — three full-screen questions to a live board
-// (line → boarding station → destination; no dropdowns anywhere)
+// ONBOARDING WIZARD — a living map of Chicagoland: tap your line, tap your two
+// stations, then opt into alerts. No dropdowns; the map is the picker.
 // ============================================================
-let wiz = null; // { step, cameFrom: "boot"|"settings", line, sts, from, loading }
+let wiz = null;        // { step, cameFrom: "boot"|"settings", line, sts, from, loading }
+let wizMap = null;     // map controller (map.js) mounted across steps 1-3
+let mapGeo = null;     // { stopsByLine } — every line's station geometry, for the system map
+
+// Load every line's stations once (edge-cached), so the whole system can be drawn.
+async function ensureMapGeo() {
+  if (mapGeo) return mapGeo;
+  const entries = await Promise.all(lines.map(async l => {
+    try { return [l.id, (await api(`/api/stops?route=${encodeURIComponent(l.id)}`)).stations]; }
+    catch { return [l.id, []]; }
+  }));
+  mapGeo = { stopsByLine: Object.fromEntries(entries) };
+  return mapGeo;
+}
 
 function showWizard(cameFrom = "boot") {
   wiz = { step: 1, cameFrom, sts: [] };
+  wizMap = null;
   swapView("wizard");
-  document.documentElement.style.setProperty("--line", "#005A45");
+  document.documentElement.style.setProperty("--line", WIZ_LINE);
+  buildWizMap();   // async: draws the map when geometry arrives
   renderWizard();
 }
+
+async function buildWizMap() {
+  const host = $("#wiz-map");
+  if (!host) return;
+  host.classList.add("loading");
+  host.innerHTML = `<div class="lmap-load">Drawing the map…</div>`;
+  try {
+    const { stopsByLine } = await ensureMapGeo();
+    if (!wiz) return; // wizard was closed while geometry loaded
+    wizMap = createMap(host, { lines, stopsByLine, onLine: onMapLine, onStation: onMapStation });
+    host.classList.remove("loading");
+    applyMapState();
+  } catch {
+    host.classList.remove("loading");
+    host.innerHTML = `<div class="lmap-load">Map unavailable offline — pick from the list below.</div>`;
+  }
+}
+
+// Reflect the wizard's current step onto the map (focus + selected markers).
+function applyMapState() {
+  const host = $("#wiz-map");
+  if (host) host.classList.toggle("hidden", wiz.step === 4);
+  if (!wizMap) return;
+  if (wiz.step === 1) wizMap.unfocus();
+  else if (wiz.step >= 2 && wiz.line) {
+    wizMap.focus(wiz.line);
+    wizMap.select(wiz.line, { from: wiz.from && wiz.from.id });
+  }
+}
+
+function onMapLine(id) { if (wiz && wiz.step === 1) pickWizLine(id); }
+function onMapStation(lineId, sid) { if (wiz && (wiz.step === 2 || wiz.step === 3)) pickWizStation(sid); }
 
 function wizBack() {
   if (wiz.step === 3) { wiz.from = null; wiz.step = 2; return renderWizard(); }
   if (wiz.step === 2) {
     wiz.line = null; wiz.step = 1;
-    document.documentElement.style.setProperty("--line", "#005A45");
+    document.documentElement.style.setProperty("--line", WIZ_LINE);
     return renderWizard();
   }
   // step 1 → leave the wizard if there's somewhere to go back to
@@ -472,18 +522,19 @@ function renderWizard() {
   filter.oninput = renderWizardList;
   filter.classList.toggle("hidden", wiz.step !== 2 && wiz.step !== 3); // stations only
   if (wiz.step === 1) {
-    $("#wiz-title").textContent = "Which line do you ride?";
-    $("#wiz-sub").textContent = "Eleven lines cross Chicagoland. Pick yours; you can add more routes anytime.";
+    $("#wiz-title").textContent = "Tap your line";
+    $("#wiz-sub").textContent = "Eleven lines cross Chicagoland. Tap yours on the map, or pick it below.";
   } else if (wiz.step === 2) {
-    $("#wiz-title").textContent = "Where do you board?";
-    $("#wiz-sub").textContent = `${wiz.line} · We'll watch departures, delays, and weather from your home station.`;
+    $("#wiz-title").textContent = "Tap your home station";
+    $("#wiz-sub").textContent = `${wiz.line} · where you board in the morning.`;
   } else if (wiz.step === 3) {
-    $("#wiz-title").textContent = "Where do you get off?";
-    $("#wiz-sub").textContent = `From ${wiz.from.name} · Every trip timed to the minute, express or local.`;
+    $("#wiz-title").textContent = "Tap where you're headed";
+    $("#wiz-sub").textContent = `From ${wiz.from.name} · your destination on the line.`;
   } else {
     $("#wiz-title").textContent = "Never miss a train";
     $("#wiz-sub").textContent = "Choose what you'd like. Nothing turns on unless you say so; adjust anytime in Settings.";
   }
+  applyMapState();
   if (wiz.step === 4) renderWizardFeatures(); else renderWizardList();
 }
 
@@ -527,9 +578,12 @@ function renderWizardList() {
 async function pickWizLine(id) {
   const l = lines.find(x => x.id === id);
   wiz.line = id;
+  wiz.from = null;
   wiz.step = 2;
+  if (l) document.documentElement.style.setProperty("--line", wizMap ? wizMap.lift(l.color) : l.color);
+  const cached = mapGeo && mapGeo.stopsByLine[id];
+  if (cached && cached.length) { wiz.sts = cached; wiz.loading = false; return renderWizard(); }
   wiz.loading = true;
-  if (l) document.documentElement.style.setProperty("--line", l.color); // theme floods to the line
   renderWizard();
   try { wiz.sts = (await api(`/api/stops?route=${encodeURIComponent(id)}`)).stations; }
   catch { wiz.sts = []; }
@@ -540,6 +594,7 @@ async function pickWizLine(id) {
 function pickWizStation(id) {
   const s = wiz.sts.find(x => x.id === id);
   if (!s) return;
+  if (wiz.step === 3 && wiz.from && s.id === wiz.from.id) return; // can't get off where you boarded
   if (wiz.step === 2) { wiz.from = s; wiz.step = 3; renderWizard(); return; }
   if (S.routes.length >= 5) {
     $("#wiz-sub").textContent = "Route limit reached (5). Remove one in Settings first.";

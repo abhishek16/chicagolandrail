@@ -11,7 +11,7 @@
   --red: #B3261E;
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
   --shadow-md: 0 6px 18px rgba(16, 24, 40, 0.08);
-  --board: "SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --board: "Overpass Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -29,7 +29,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 html { -webkit-text-size-adjust: 100%; }
 body {
   background: var(--bg); color: var(--text);
-  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font: 15px/1.55 "Overpass", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   min-height: 100dvh;
@@ -470,7 +470,15 @@ button.ghost.wide.danger.confirm { background: var(--red); border-color: var(--r
 }
 .seg button.on .tab-live { background: #fff; }
 
-/* ---- onboarding wizard (three full-screen questions) ---- */
+/* ---- onboarding: living map ----
+   Dark, full-bleed. Scoping the palette as variables here flips the wizard's
+   rows, inputs, and feature cards to dark automatically (they read these vars). */
+#view-wizard {
+  --bg: #0A0F15; --surface: #0E151E; --text: #E9EDF2;
+  --muted: #7E8A97; --border: #223041;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5); --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
+  background: var(--bg); color: var(--text);
+}
 .wiz-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0; }
 .wiz-spacer { width: 36px; }
 .wiz-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -510,6 +518,36 @@ button.ghost.wide.danger.confirm { background: var(--red); border-color: var(--r
 .wiz-row .s { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wiz-go { margin-left: auto; color: var(--muted); font-size: 18px; line-height: 1; flex-shrink: 0; }
 @media (prefers-reduced-motion: reduce) { .wiz-row:active { transform: none; } }
+
+/* the map itself is the primary picker (steps 1-3) */
+.wiz-map { margin: 10px 10px 0; border-radius: 16px; overflow: hidden;
+  background: #0A0F15; border: 1px solid #17222E; position: relative; }
+.lmap-load { min-height: 260px; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 13px; text-align: center; padding: 24px; }
+.lmap { width: 100%; height: auto; display: block; max-height: 60vh; }
+.lmap-lake { fill: #0D1926; stroke: #17293A; stroke-width: 1.4; }
+.lmap-line .lmap-hit { fill: none; stroke: #000; stroke-opacity: 0; stroke-width: 22; cursor: pointer; }
+.lmap-line .lmap-glow { fill: none; stroke: var(--c); stroke-opacity: 0.15; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+.lmap-line .lmap-core { fill: none; stroke: var(--c); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+.lmap-line .lmap-stn { fill: #0A0F15; stroke: var(--c); stroke-width: 1.2; pointer-events: none; }
+.lmap-line .lmap-lbl { display: none; fill: #E9EDF2; font: 700 9.5px "Overpass", sans-serif; paint-order: stroke; stroke: #0A0F15; stroke-width: 3; pointer-events: none; }
+.lmap-line .lmap-term { fill: #7E8A97; font: 700 10px "Overpass", sans-serif; pointer-events: none; }
+.lmap.focus .lmap-line { opacity: 0.1; transition: opacity 0.25s; }
+.lmap.focus .lmap-line.on { opacity: 1; }
+.lmap.focus .lmap-line.on .lmap-core { stroke-width: 3.2; }
+.lmap.focus .lmap-line.on .lmap-glow { stroke-opacity: 0.3; }
+.lmap.focus .lmap-line.on .lmap-stn { r: 3.4; cursor: pointer; pointer-events: auto; }
+.lmap.focus .lmap-line.on .lmap-lbl { display: block; }
+.lmap.focus .lmap-line.on .lmap-term { display: none; }
+.lmap-line .lmap-stn.from { fill: var(--c); stroke: #fff; stroke-width: 2; r: 5; }
+.lmap-line .lmap-stn.to { fill: #fff; stroke: var(--c); stroke-width: 2.5; r: 5; }
+.lmap-line .lmap-lbl.pick { display: block; fill: #fff; font-weight: 800; }
+.lmap-hub { fill: #0A0F15; stroke: #fff; stroke-width: 2.2; }
+.lmap-hub-lbl { fill: #fff; font: 800 12px "Overpass", sans-serif; letter-spacing: 0.12em; }
+.lmap-train-halo { fill: #2FD53B; opacity: 0.25; animation: lmapPulse 1.6s ease-in-out infinite; }
+.lmap-train { fill: #fff; stroke: #2FD53B; stroke-width: 2.4; }
+@keyframes lmapPulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.07; } }
+@media (prefers-reduced-motion: reduce) { .lmap-train-halo { animation: none; } .lmap.focus .lmap-line { transition: none; } }
 
 /* wizard step 4: feature explainers */
 .feat {
