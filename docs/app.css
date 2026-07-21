@@ -63,6 +63,9 @@ header {
 .icon-btn svg { width: 19px; height: 19px; display: block; }
 h1 { padding: 10px 16px 0; font-size: 20px; font-weight: 680; letter-spacing: -0.02em; }
 h1 .arrow { color: var(--line); }
+.tappable-title { cursor: pointer; }
+.tappable-title:hover { color: var(--line); }
+.tappable-title:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; border-radius: 6px; }
 
 /* which line this board belongs to — visible on both Live and Schedule */
 .pill-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 16px 0; }
@@ -132,43 +135,62 @@ h1 .arrow { color: var(--line); }
 .banner { padding: 9px 16px; font-size: 13px; background: #33290F; color: #F2C766; border-bottom: 1px solid #46370F; }
 .banner.offline { background: transparent; color: var(--muted); border-bottom: 1px solid var(--border); }
 
+/* ---- collapsible stops (default closed; hero + each later train) ---- */
+.stops-toggle {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+  margin-top: 14px; border: none; background: transparent; color: var(--muted);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 4px;
+}
+.stops-toggle:hover { color: var(--text); }
+.stops-toggle .caret, .trip-row .caret { display: inline-block; transition: transform 0.2s; font-size: 11px; }
+.stops-wrap.open .stops-toggle .caret, .trip.open .trip-row .caret { transform: rotate(180deg); }
+.stops-collapse { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+.stops-wrap.open .stops-collapse, .trip.open .stops-collapse { max-height: 1400px; }
+
 /* ---- route diagram (vertical strip): readable stops + live train ---- */
-.rs { margin: 16px 0 2px; }
-.rs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.rs-head-title { font-size: 12.5px; font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs { margin: 6px 0 4px; }
+.rs-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.rs-head-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rs-head-title .arrow { color: var(--line); }
+.rs-status { flex-shrink: 0; font-size: 11px; font-weight: 700; }
+.rs-status.live { color: var(--green); } .rs-status.est { color: var(--line); } .rs-status.pre { color: var(--muted); font-weight: 600; }
 .rs-rev {
   flex-shrink: 0; border: 1px solid var(--border); background: var(--bg); color: var(--muted);
   border-radius: 8px; width: 30px; height: 26px; font-size: 14px; cursor: pointer; line-height: 1;
 }
 .rs-rev:hover { border-color: var(--line); color: var(--text); }
-.rs-body { position: relative; max-height: 340px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.rs-stop { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; height: 34px; }
-.rs-rail { position: relative; height: 100%; display: flex; justify-content: center; }
-/* the connecting line runs through the rail column */
+.rs-body { position: relative; max-height: 300px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* flex row: rail | name (truncates) | tag | time — nothing overlaps */
+.rs-stop { display: flex; align-items: center; height: 34px; gap: 4px; }
+.rs-rail { position: relative; width: 26px; flex-shrink: 0; height: 100%; display: flex; justify-content: center; }
 .rs-rail::before { content: ""; position: absolute; top: 0; bottom: 0; width: 3px; background: var(--line); opacity: 0.5; }
 .rs-stop:first-child .rs-rail::before { top: 50%; }
 .rs-stop:last-child .rs-rail::before { bottom: 50%; }
 .rs-dot { position: relative; z-index: 1; width: 9px; height: 9px; border-radius: 50%; align-self: center; background: var(--bg); border: 2px solid var(--line); }
 .rs-stop.off .rs-dot { border-color: var(--muted); width: 7px; height: 7px; }
 .rs-stop.off .rs-rail::before { opacity: 0.25; }
-.rs-name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px; }
+.rs-name { flex: 1; min-width: 0; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rs-stop.off .rs-name { color: var(--muted); }
 .rs-stop.from .rs-dot, .rs-stop.to .rs-dot { width: 13px; height: 13px; border-width: 3px; }
 .rs-stop.from .rs-dot { background: var(--line); }
 .rs-stop.to .rs-dot { background: var(--bg); box-shadow: 0 0 0 3px var(--border); }
 .rs-stop.from .rs-name, .rs-stop.to .rs-name { font-weight: 700; }
-.rs-tag { margin-left: 7px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+.rs-tag { flex-shrink: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--line-ink); background: var(--line); border-radius: 999px; padding: 1px 7px; }
-.rs-time { font-family: var(--board); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--green); padding-left: 8px; }
+.rs-time { flex-shrink: 0; font-family: var(--board); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--green); }
 .rs-stop.off .rs-time { color: var(--muted); font-family: inherit; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
-/* the train, positioned on the rail between stops */
-.rs-train { position: absolute; left: 0; width: 26px; transform: translateY(-50%); display: flex; align-items: center; pointer-events: none; z-index: 3; }
-.rs-train-dot { width: 15px; height: 15px; border-radius: 50%; margin-left: 5.5px; background: #fff; border: 3px solid var(--line);
+/* the train: a dot on the rail only (no text over names) */
+.rs-train { position: absolute; left: 0; width: 26px; transform: translateY(-50%); display: flex; justify-content: center; pointer-events: none; z-index: 3; }
+.rs-train-dot { width: 15px; height: 15px; border-radius: 50%; background: #fff; border: 3px solid var(--line);
   box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.10), 0 1px 4px rgba(0, 0, 0, 0.55); }
-.rs-train-lbl { position: absolute; left: 30px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--line); white-space: nowrap; text-shadow: 0 1px 3px var(--bg), 0 0 3px var(--bg); }
-.rs-train.pre .rs-train-lbl { color: var(--muted); }
+
+/* subsequent-train rows are buttons that expand their own stop list */
+.trip { border-bottom: 1px solid var(--border); }
+.trip-row { width: 100%; text-align: left; background: transparent; border: none; cursor: pointer; }
+.trip-row.row { border-bottom: none; }
+.trip-row .right { justify-content: flex-end; }
+.trip.open { background: rgba(255, 255, 255, 0.02); }
+.trip .stops-collapse { padding: 0 4px 10px; }
 
 /* ---- content ---- */
 main#content { padding: 16px; flex: 1; }
@@ -185,29 +207,6 @@ main#content { padding: 16px; flex: 1; }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-/* ---- expandable stop list ---- */
-.stops-toggle { font-size: 12px; color: var(--muted); text-align: center; margin-top: 12px; }
-.stops-toggle .caret { display: inline-block; transition: transform 0.2s; }
-.hero.expanded .stops-toggle .caret { transform: rotate(180deg); }
-.stops-panel { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
-.stops-panel.open { max-height: 2000px; }
-.stops-inner { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--border); }
-.stop {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
-  padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 13px;
-}
-.stop:last-child { border-bottom: none; }
-.stop .stop-name { position: relative; padding-left: 16px; }
-.stop .stop-name::before {
-  content: ""; position: absolute; left: 2px; top: 50%; transform: translateY(-50%);
-  width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--line);
-}
-.stop.on .stop-name { font-weight: 500; }
-.stop.on .stop-name::before { background: var(--line); }
-.stop.on .stop-time { font-family: var(--board); font-variant-numeric: tabular-nums; color: var(--green); }
-.stop.off { opacity: 0.5; }
-.stop.off .stop-name::before { border-color: var(--muted); }
-.stop.off .stop-time { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 .chip {
   display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
   padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
@@ -297,14 +296,9 @@ main#content { padding: 16px; flex: 1; }
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 
-/* ---- journey bar ---- */
-.journey { margin: 14px 2px 2px; }
-.journey svg { width: 100%; height: 40px; display: block; }
-.journey .lbls { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .pulse { animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) { .pulse, .live-dot::before { animation: none; } }
-.journey .est { font-size: 10px; color: var(--muted); text-align: right; }
 
 .hint { font-size: 13px; color: var(--express); margin: 0 0 12px; padding: 0 2px; }
 
@@ -584,6 +578,13 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .wiz-row.saved .wiz-bar { width: 6px; }
 .wiz-reset { width: 100%; margin-top: 4px; padding: 9px; font-size: 13px; }
 .wiz-reset.confirm { background: #C0392B; border-color: #C0392B; color: #fff; }
+/* step-3 suggested destination (auto-picked downtown, one-tap continue) */
+.wiz-suggest { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow-sm); }
+.wiz-suggest-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wiz-suggest-name { font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wiz-suggest .primary { flex-shrink: 0; }
+.wiz-row.suggested { border-color: var(--line); }
 /* station-list bar with the reverse toggle */
 .wiz-listbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 2px 2px; }
 .wiz-rev { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 8px; padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer; }
@@ -595,40 +596,42 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .lmap-load { min-height: 260px; display: flex; align-items: center; justify-content: center;
   color: var(--muted); font-size: 13px; text-align: center; padding: 24px; }
 .lmap { width: 100%; height: auto; display: block; max-height: 60vh; }
+/* the pan/zoom camera — smoothly zooms into a hovered/focused line */
+.lmap-cam { transform-origin: 0 0; transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
 .lmap-lake { fill: #0D1926; stroke: #17293A; stroke-width: 1.4; }
 .lmap-line .lmap-hit { fill: none; stroke: #000; stroke-opacity: 0; stroke-width: 22; cursor: pointer; }
-.lmap-line .lmap-glow { fill: none; stroke: var(--c); stroke-opacity: 0.15; stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
-.lmap-line .lmap-core { fill: none; stroke: var(--c); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+/* lines a touch bolder so they read on the dark water */
+.lmap-line .lmap-glow { fill: none; stroke: var(--c); stroke-opacity: 0.2; stroke-width: 8.5; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+.lmap-line .lmap-core { fill: none; stroke: var(--c); stroke-width: 2.8; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
 .lmap-line .lmap-stn { fill: #0A0F15; stroke: var(--c); stroke-width: 1.2; pointer-events: none; }
-.lmap-line .lmap-lbl { display: none; fill: #E9EDF2; font: 700 9.5px "Overpass", sans-serif; paint-order: stroke; stroke: #0A0F15; stroke-width: 3; pointer-events: none; }
-.lmap-line .lmap-term { fill: #7E8A97; font: 700 10px "Overpass", sans-serif; pointer-events: none; }
-/* hover (desktop): trace the route with a flowing dash — a quick preview of the
-   line's journey before you commit. No-op on the Tesla/touch (no hover). */
-.lmap:not(.focus) .lmap-line:hover .lmap-core { stroke-width: 3.6; stroke-dasharray: 16 10; animation: lmapFlow 0.8s linear infinite; }
-.lmap:not(.focus) .lmap-line:hover .lmap-glow { stroke-opacity: 0.42; stroke-width: 9; }
+.lmap-line .lmap-lbl { display: none; fill: #E9EDF2; font-weight: 700; font-family: "Overpass", sans-serif;
+  font-size: calc(9.5px * var(--inv, 1)); paint-order: stroke; stroke: #0A0F15; stroke-width: calc(3px * var(--inv, 1)); pointer-events: none; }
+.lmap-line .lmap-term { fill: #7E8A97; font-weight: 700; font-family: "Overpass", sans-serif; font-size: calc(10px * var(--inv, 1)); pointer-events: none; }
+/* hover / focus preview: trace the route with a flowing dash and brighten it */
+.lmap-line.hovering .lmap-core { stroke-dasharray: 16 10; animation: lmapFlow 0.8s linear infinite; }
+.lmap-line.hovering .lmap-glow { stroke-opacity: 0.5; }
 @keyframes lmapFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -26; } }
 
-.lmap.focus .lmap-line { opacity: 0.1; transition: opacity 0.25s; }
+/* when zoomed into a line (hover or focus), show ALL of its station names */
+.lmap-line.on .lmap-lbl, .lmap-line.hovering .lmap-lbl { display: block; }
+.lmap-line.on .lmap-term, .lmap-line.hovering .lmap-term { display: none; }
+
+.lmap.focus .lmap-line { opacity: 0.08; transition: opacity 0.25s; }
 .lmap.focus .lmap-line.on { opacity: 1; }
-.lmap.focus .lmap-line.on .lmap-core { stroke-width: 3.2; }
-.lmap.focus .lmap-line.on .lmap-glow { stroke-opacity: 0.3; }
-.lmap.focus .lmap-line.on .lmap-stn { r: 3.4; cursor: pointer; pointer-events: auto; }
-/* Don't cram every name onto the diagonal (unreadable). Only the chosen
-   board/destination stay labeled; hovering a stop reveals its name; the
-   readable list below is the primary picker. */
-.lmap.focus .lmap-line.on .lmap-stn:hover + .lmap-lbl { display: block; }
-.lmap.focus .lmap-line.on .lmap-term { display: none; }
-.lmap-line .lmap-stn.from { fill: var(--c); stroke: #fff; stroke-width: 2; r: 5; }
-.lmap-line .lmap-stn.to { fill: #fff; stroke: var(--c); stroke-width: 2.5; r: 5; }
+.lmap.focus .lmap-line.on .lmap-core { stroke-width: 3.4; }
+.lmap.focus .lmap-line.on .lmap-glow { stroke-opacity: 0.32; }
+.lmap.focus .lmap-line.on .lmap-stn { r: 3; cursor: pointer; pointer-events: auto; }
+.lmap-line .lmap-stn.from { fill: var(--c); stroke: #fff; stroke-width: 2; r: 4.5; }
+.lmap-line .lmap-stn.to { fill: #fff; stroke: var(--c); stroke-width: 2.5; r: 4.5; }
 .lmap-line .lmap-lbl.pick { display: block; fill: #fff; font-weight: 800; }
 .lmap-hub { fill: #0A0F15; stroke: #fff; stroke-width: 2.2; }
-.lmap-hub-lbl { fill: #fff; font: 800 12px "Overpass", sans-serif; letter-spacing: 0.12em; }
+.lmap-hub-lbl { fill: #fff; font-weight: 800; font-family: "Overpass", sans-serif; font-size: calc(12px * var(--inv, 1)); letter-spacing: 0.12em; }
 .lmap-train-halo { fill: #2FD53B; opacity: 0.25; animation: lmapPulse 1.6s ease-in-out infinite; }
 .lmap-train { fill: #fff; stroke: #2FD53B; stroke-width: 2.4; }
 @keyframes lmapPulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.07; } }
 @media (prefers-reduced-motion: reduce) {
-  .lmap-train-halo, .lmap:not(.focus) .lmap-line:hover .lmap-core { animation: none; }
-  .lmap.focus .lmap-line { transition: none; }
+  .lmap-train-halo, .lmap-line.hovering .lmap-core { animation: none; }
+  .lmap.focus .lmap-line, .lmap-cam { transition: none; }
 }
 
 /* wizard step 4: feature explainers */
@@ -650,24 +653,6 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .feat-actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 6px; }
 .feat-actions .primary { flex: 1; }
 
-/* ---- first-run tour (coach marks) ---- */
-.tour-backdrop { position: fixed; inset: 0; z-index: 200; }
-.tour-ring {
-  position: fixed; border: 2px solid #fff; border-radius: 14px; pointer-events: none;
-  box-shadow: 0 0 0 9999px rgba(10, 14, 20, 0.55); /* dims everything except the target */
-  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
-}
-.tour-card {
-  position: fixed; width: 300px; max-width: calc(100vw - 24px);
-  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-  padding: 14px; box-shadow: var(--shadow-md);
-}
-.tour-card b { font-size: 14px; }
-.tour-card p { font-size: 13px; color: var(--muted); margin: 4px 0 12px; }
-.tour-btns { display: flex; justify-content: space-between; gap: 8px; }
-.tour-btns .primary { padding: 8px 16px; font-size: 13px; }
-.tour-btns .ghost { padding: 8px 12px; font-size: 13px; }
-@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } }
 
 /* ---- contextual nudge cards (feature discovery on the board) ---- */
 #nudge:not(:empty) { padding: 12px 16px 0; }

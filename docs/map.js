@@ -67,11 +67,15 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
   const d2hub = st => { const [x, y] = pt(st); return (x - hx) ** 2 + (y - hy) ** 2; };
 
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, class: "lmap", role: "img", "aria-label": "Metra system map" });
+  // Everything lives inside a camera group we can pan/scale (CSS-transitioned) to
+  // zoom into a hovered/focused line so its station names become readable.
+  const cam = el("g", { class: "lmap-cam" });
+  svg.appendChild(cam);
 
   // ---- water ----
   const lake = "M " + SHORE.map(([la, lo]) => `${r1(px(lo))},${r1(py(la))}`).join(" L ")
     + ` L ${W + 60},${r1(py(41.55))} L ${W + 60},-60 L ${r1(px(-87.79))},-60 Z`;
-  svg.appendChild(el("path", { class: "lmap-lake", d: lake }));
+  cam.appendChild(el("path", { class: "lmap-lake", d: lake }));
 
   // ---- one <g> per line ----
   const groups = {};
@@ -82,14 +86,15 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     const path = "M " + sts.map(st => pt(st).map(r1).join(",")).join(" L ");
     const g = el("g", { class: "lmap-line", "data-id": l.id });
     g.style.setProperty("--c", c);
-    g.appendChild(el("path", { class: "lmap-hit", d: path }));       // fat invisible tap target
-    g.appendChild(el("path", { class: "lmap-glow", d: path }));
-    g.appendChild(el("path", { class: "lmap-core", d: path }));
+    // non-scaling-stroke keeps line/dot widths crisp (constant screen px) when zoomed
+    g.appendChild(el("path", { class: "lmap-hit", d: path, "vector-effect": "non-scaling-stroke" }));
+    g.appendChild(el("path", { class: "lmap-glow", d: path, "vector-effect": "non-scaling-stroke" }));
+    g.appendChild(el("path", { class: "lmap-core", d: path, "vector-effect": "non-scaling-stroke" }));
 
     const stnEls = {};
     for (const st of sts) {
       const [x, y] = pt(st).map(r1);
-      const dot = el("circle", { class: "lmap-stn", cx: x, cy: y, r: 2.1, "data-id": st.id });
+      const dot = el("circle", { class: "lmap-stn", cx: x, cy: y, r: 2.1, "data-id": st.id, "vector-effect": "non-scaling-stroke" });
       g.appendChild(dot);
       const left = x > hx;
       const lbl = el("text", {
@@ -113,23 +118,25 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     term.textContent = far.name;
     g.appendChild(term);
 
-    g.querySelector(".lmap-hit").addEventListener("click", e => {
-      e.stopPropagation();
-      onLine && onLine(l.id);
-    });
-    svg.appendChild(g);
+    const hit = g.querySelector(".lmap-hit");
+    hit.addEventListener("click", e => { e.stopPropagation(); onLine && onLine(l.id); });
+    // Desktop hover: zoom into the line and reveal its station names (a preview of
+    // the route). No-op on touch (no hover); focus() does the same on tap.
+    hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) ctrl.hover(l.id); });
+    hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) ctrl.hover(null); });
+    cam.appendChild(g);
     groups[l.id] = { g, stnEls };
   }
 
   // ---- live-train layer (populated in the live view) ----
   const trainLayer = el("g", { class: "lmap-trains" });
-  svg.appendChild(trainLayer);
+  cam.appendChild(trainLayer);
 
   // ---- downtown hub marker ----
-  svg.appendChild(el("circle", { class: "lmap-hub", cx: hx, cy: hy, r: 5.2 }));
+  cam.appendChild(el("circle", { class: "lmap-hub", cx: hx, cy: hy, r: 5.2 }));
   const hubLbl = el("text", { class: "lmap-hub-lbl", x: hx + 11, y: hy + 4 });
   hubLbl.textContent = "CHICAGO";
-  svg.appendChild(hubLbl);
+  cam.appendChild(hubLbl);
 
   host.innerHTML = "";
   host.appendChild(svg);
@@ -138,6 +145,16 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
   // "explore" view). Off during onboarding, where Back drives the step/focus, so a
   // stray water tap can't desync the map from the wizard's current question.
   svg.addEventListener("click", () => { if (ctrl.releaseOnWater) ctrl.unfocus(); });
+
+  // Bring a line (and the train/hub layers) to the top of the camera so it draws
+  // above the dimmed system.
+  function raiseLine(lineId) {
+    const fg = groups[lineId] && groups[lineId].g;
+    if (fg) cam.appendChild(fg);
+    cam.appendChild(trainLayer);
+    cam.appendChild(cam.querySelector(".lmap-hub"));
+    cam.appendChild(hubLbl);
+  }
 
   // ---- controller ----
   const ctrl = {
@@ -160,15 +177,37 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     focus(lineId) {
       svg.classList.add("focus");
       for (const id in groups) groups[id].g.classList.toggle("on", id === lineId);
-      const fg = groups[lineId] && groups[lineId].g;
-      if (fg) svg.appendChild(fg), svg.appendChild(trainLayer); // bring focused line above the rest
-      svg.appendChild(svg.querySelector(".lmap-hub"));
-      svg.appendChild(hubLbl);
+      raiseLine(lineId);
+      ctrl.zoomTo(lineId); // zoom in so this line's station names are readable
     },
     unfocus() {
       svg.classList.remove("focus");
-      for (const id in groups) groups[id].g.classList.remove("on");
+      for (const id in groups) groups[id].g.classList.remove("on", "hovering");
+      ctrl.resetZoom();
       ctrl.select(null);
+    },
+    // desktop hover preview (system view): zoom into a line + show its names
+    hover(lineId) {
+      for (const id in groups) groups[id].g.classList.toggle("hovering", id === lineId);
+      if (lineId) { raiseLine(lineId); ctrl.zoomTo(lineId); }
+      else ctrl.resetZoom();
+    },
+    zoomTo(lineId) {
+      const b = ctrl.boundsOf(lineId);
+      if (!b) return;
+      const pad = 0.14;
+      const bw = Math.max(b.maxX - b.minX, 1), bh = Math.max(b.maxY - b.minY, 1);
+      let s = Math.min((W * (1 - 2 * pad)) / bw, (H * (1 - 2 * pad)) / bh);
+      s = Math.max(1.2, Math.min(s, 4));
+      const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+      cam.style.transform = `translate(${r1(W / 2 - cx * s)}px, ${r1(H / 2 - cy * s)}px) scale(${s.toFixed(3)})`;
+      svg.style.setProperty("--inv", (1 / s).toFixed(3)); // counter-scale labels to keep them ~constant size
+      svg.classList.add("zoomed");
+    },
+    resetZoom() {
+      cam.style.transform = "";
+      svg.style.setProperty("--inv", "1");
+      svg.classList.remove("zoomed");
     },
     // mark board / destination stations on the focused line
     select(lineId, sel = {}) {

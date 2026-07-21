@@ -21,7 +21,7 @@
       <header>
         <div id="line-accent"></div>
         <div class="header-row">
-          <button id="back-btn" class="icon-btn" title="Routes &amp; settings" aria-label="Manage routes and settings">
+          <button id="back-btn" class="icon-btn" title="Choose line / route" aria-label="Choose line or route">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
           </button>
           <select id="route-picker" aria-label="Switch route"></select>
@@ -34,7 +34,7 @@
             </button>
           </div>
         </div>
-        <h1 id="route-title"></h1>
+        <h1 id="route-title" class="tappable-title" title="Choose line / route" role="button" tabindex="0"></h1>
         <div class="pill-row">
           <div id="line-pill"></div>
           <button id="alert-chip" class="alert-chip hidden" type="button"></button>
@@ -83,25 +83,6 @@
           <div class="card">
             <label class="check"><input type="checkbox" id="notif-toggle"> Notify me about new delays, cancellations, and service alerts, even when the app is closed.</label>
             <p id="notif-note" class="muted small" style="margin-bottom:0"></p>
-          </div>
-        </section>
-
-        <section class="sec" id="sec-reminders">
-          <h2>Departure reminders</h2>
-          <p class="muted small">A push before a chosen train, with its live delay.</p>
-          <p class="lock-hint small">Turn on notifications above to set up reminders.</p>
-          <div id="reminder-list"></div>
-          <div class="card">
-            <label>Route <select id="rem-route"></select></label>
-            <label>Direction <select id="rem-dir"><option value="HW">To work</option><option value="WH">To home</option></select></label>
-            <label>Train <select id="rem-train"><option value="">Pick route &amp; direction first…</option></select><span id="rem-sched" class="sched-hint"></span></label>
-            <div class="grid2">
-              <label>Notify before <select id="rem-lead"><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option></select></label>
-              <label>Days <select id="rem-days"><option value="wd">Weekdays</option><option value="all">Every day</option></select></label>
-            </div>
-            <button id="rem-add" class="primary">Add reminder</button>
-            <p id="rem-error" class="error hidden"></p>
-            <p id="rem-ok" class="ok small hidden">Reminder added</p>
           </div>
         </section>
 

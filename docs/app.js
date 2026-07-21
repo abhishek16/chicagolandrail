@@ -30,7 +30,7 @@ const store = {
   },
   save(s) { localStorage.setItem("mct", JSON.stringify(s)); },
 };
-let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0, tour: null, alertsSeen: null }, store.load());
+let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, briefing: null, nudges: {}, visits: 0, alertsSeen: null }, store.load());
 const persist = () => store.save(S);
 
 let lines = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
@@ -42,7 +42,6 @@ let reqSeq = 0;
 let ttDate = null;               // null = live board; "YYYY-MM-DD" = schedule for that day
 let swReg = null;                // service-worker registration, for OS notifications
 let notifiedAlerts = new Set();  // alert ids we've already notified about
-let expandedStops = {};          // direction -> whether the hero's stop list is open
 let meta = null;                 // /api/meta freshness, for the stale-data warning
 let weatherCache = new Map();    // stationId -> { periods, at }
 let oneOff = null;               // transient one-off trip (not saved), overrides active route
@@ -149,7 +148,7 @@ async function subscribePush() {
     await apiPost("/api/push/subscribe", {
       subscription: sub.toJSON(),
       lines: [...new Set(S.routes.map(r => r.line))],
-      reminders: S.reminders || [],
+      reminders: [], // departure reminders removed; server keeps supporting the field
       briefing: S.briefing || null,
     });
   } catch { /* push unsupported/blocked — in-page notifications still work */ }
@@ -214,21 +213,19 @@ function showSetup(opts = {}) {
         if (p !== "granted") { e.target.checked = false; return; }
       }
       S.notify = true; persist();
-      updateGates({ scroll: true }); // unlock reminders + briefing, scroll to them
+      updateGates({ scroll: true }); // unlock the briefing, scroll to it
       await subscribePush();
     } else {
       S.notify = false; persist();
-      updateGates(); // re-lock reminders + briefing
+      updateGates(); // re-lock the briefing
       await unsubscribePush();
     }
   };
-  try { setupReminders(); } catch (e) { console.error("reminders setup failed", e); }
   try { setupBriefing(); } catch (e) { console.error("briefing setup failed", e); }
 
   // Replace native <select>/<input type=time> popups with tap-friendly widgets
   // so every picker works in browsers that won't open native popups (Tesla).
-  ["#rem-route", "#rem-dir", "#rem-train", "#rem-lead", "#rem-days", "#brief-route"]
-    .forEach(s => enhanceSelect($(s)));
+  ["#brief-route"].forEach(s => enhanceSelect($(s)));
   ["#m0", "#m1", "#e0", "#e1", "#brief-time"].forEach(s => enhanceTime($(s)));
   updateGates(); // set initial locked/unlocked state (no scroll on first paint)
   if (opts.scrollTo) {
@@ -236,78 +233,6 @@ function showSetup(opts = {}) {
     if (target) setTimeout(() =>
       target.scrollIntoView({ behavior: REDUCE_MOTION ? "auto" : "smooth", block: "start" }), 60);
   }
-}
-
-// ---------- departure reminders (setup UI) ----------
-function setupReminders() {
-  const routeSel = $("#rem-route");
-  const hasRoutes = S.routes.length > 0;
-  routeSel.innerHTML = hasRoutes
-    ? S.routes.map(r => `<option value="${r.id}">${esc(r.label)}</option>`).join("")
-    : `<option value="">Save a route first…</option>`;
-  let remTrains = []; // trains currently in the dropdown, looked up by value on add
-
-  const loadTrains = async () => {
-    const trainSel = $("#rem-train");
-    remTrains = [];
-    const r = S.routes.find(x => x.id === routeSel.value);
-    if (!r) { trainSel.innerHTML = `<option value="">Save a route first…</option>`; return; }
-    const [from, to] = $("#rem-dir").value === "HW" ? [r.home, r.work] : [r.work, r.home];
-    trainSel.innerHTML = `<option value="">Loading…</option>`;
-    const sched = remSchedFor($("#rem-days").value);
-    const hint = $("#rem-sched"); if (hint) hint.textContent = sched.label;
-    try {
-      const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${sched.date}`);
-      remTrains = (data.trains || []).filter(t => t.depSec != null);
-      trainSel.innerHTML = remTrains.length
-        ? remTrains.map(t => `<option value="${t.depSec}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
-        : `<option value="">No trains found for this route</option>`;
-    } catch { trainSel.innerHTML = `<option value="">Couldn't load trains. Check connection</option>`; }
-  };
-  routeSel.onchange = loadTrains;
-  $("#rem-dir").onchange = loadTrains;
-  $("#rem-days").onchange = loadTrains; // weekday vs every-day lists different schedules
-  if (hasRoutes) loadTrains();
-
-  $("#rem-add").onclick = () => {
-    const err = $("#rem-error");
-    const show = m => { err.textContent = m; err.classList.remove("hidden"); };
-    err.classList.add("hidden");
-    const r = S.routes.find(x => x.id === routeSel.value);
-    if (!r) return show("Save a route above first, then set a reminder for it.");
-    const trainSel = $("#rem-train");
-    const depSec = Number(trainSel.value);          // read .value directly (reliable on iOS)
-    const t = remTrains.find(x => Number(x.depSec) === depSec);
-    if (!trainSel.value || !t) return show(remTrains.length ? "Choose a train from the list." : "Train list is still loading. Try again in a moment.");
-    const [from, to, fromName, toName] = $("#rem-dir").value === "HW"
-      ? [r.home, r.work, r.homeName, r.workName]
-      : [r.work, r.home, r.workName, r.homeName];
-    S.reminders = S.reminders || [];
-    S.reminders.push({
-      id: "rem" + Date.now(), routeId: r.id, line: r.line,
-      from, to, fromName, toName,
-      depSec, trainNo: trainNoShort(t.trainNo), depLabel: t.dep,
-      lead: Number($("#rem-lead").value),
-      days: $("#rem-days").value === "all" ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5],
-    });
-    persist(); renderReminderList(); syncPush();
-    flashOk("#rem-ok");
-  };
-  renderReminderList();
-}
-
-function renderReminderList() {
-  const el = $("#reminder-list"); if (!el) return;
-  el.innerHTML = (S.reminders || []).map(rem => `
-    <div class="route-item">
-      <div class="ri-main"><div class="name">${esc(rem.depLabel)} · Train ${esc(rem.trainNo)}</div>
-        <div class="sub">${esc(rem.fromName)} → ${esc(rem.toName)} · ${rem.lead}m before · ${rem.days.length === 7 ? "daily" : "weekdays"}</div></div>
-      <button class="ghost danger" data-id="${rem.id}">Remove</button>
-    </div>`).join("");
-  el.querySelectorAll("[data-id]").forEach(b => b.onclick = () => {
-    S.reminders = (S.reminders || []).filter(x => x.id !== b.dataset.id);
-    persist(); renderReminderList(); syncPush();
-  });
 }
 
 // ---------- morning briefing (setup UI) ----------
@@ -396,13 +321,11 @@ function renderRouteList() {
       }
       clearTimeout(del._t);
       S.routes = S.routes.filter(x => x.id !== r.id);
-      // Cascade: reminders and the briefing tied to this route go with it.
-      S.reminders = (S.reminders || []).filter(x => x.routeId !== r.id);
+      // Cascade: the briefing tied to this route goes with it.
       if (S.briefing && S.briefing.routeId === r.id) S.briefing = null;
       if (S.activeRouteId === r.id) S.activeRouteId = S.routes[0]?.id || null;
       persist(); renderRouteList(); syncPush(); updateGates(); // re-lock if last route removed
-      // Rebuild the reminder/briefing UI so their route pickers drop the deleted route.
-      try { setupReminders(); } catch { /* section may be locked */ }
+      // Rebuild the briefing UI so its route picker drops the deleted route.
       try { setupBriefing(); } catch { /* section may be locked */ }
     };
     el.appendChild(div);
@@ -416,7 +339,6 @@ function updateGates({ scroll = false } = {}) {
   const notif = !!S.notify;
   const gates = [
     ["#sec-notif", hasRoute],
-    ["#sec-reminders", hasRoute && notif],
     ["#sec-briefing", hasRoute && notif],
   ];
   let unlocked = null;
@@ -448,9 +370,9 @@ async function resetApp() {
     if (k === "mct" || k.startsWith("mct_cache_")) gone.push(k);
   }
   gone.forEach(k => localStorage.removeItem(k));
-  S = { routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0, tour: null, alertsSeen: null };
+  S = { routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, briefing: null, nudges: {}, visits: 0, alertsSeen: null };
   oneOff = null; lastData = {}; ttDate = null; stripReversed = {};
-  lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; weatherCache.clear();
+  lastSeen.clear(); notifiedAlerts.clear(); expandedTrain = {}; stripReversed = {}; weatherCache.clear();
   showWizard("boot");
 }
 
@@ -609,18 +531,40 @@ function renderWizardList() {
   // Default order runs toward downtown (most riders' morning trip); flip to reverse.
   let ordered = orientDowntownLast(wiz.sts.slice());
   if (wizStationRev) ordered = [...ordered].reverse();
+  // Step 3 pre-suggests the downtown terminal as the destination (one-tap Continue),
+  // while still letting the rider pick any other station from the list.
+  const sug = wiz.step === 3 ? suggestedDest() : null;
   const sts = ordered.filter(s =>
     (wiz.step === 2 || s.id !== wiz.from.id) && (!q || s.name.toLowerCase().includes(q)));
+  const suggestHtml = sug ? `
+    <div class="wiz-suggest">
+      <div class="wiz-suggest-main"><span class="muted small">Suggested destination</span>
+        <span class="wiz-suggest-name">${esc(sug.name)}</span></div>
+      <button class="primary" id="wiz-confirm-dest">Continue</button>
+    </div>
+    <div class="wiz-section-label">or pick a different destination</div>` : "";
   const bar = `<div class="wiz-listbar">
-    <span class="muted small">${wiz.step === 2 ? "Pick where you board" : "Pick your destination"}</span>
+    <span class="muted small">${wiz.step === 2 ? "Pick where you board" : "Any station on the line"}</span>
     <button class="wiz-rev" id="wiz-rev" title="Reverse order">⇅ Reverse</button></div>`;
-  list.innerHTML = bar + (sts.map(s => `
-    <button class="wiz-row" data-id="${esc(s.id)}">
+  list.innerHTML = suggestHtml + bar + (sts.map(s => `
+    <button class="wiz-row${sug && s.id === sug.id ? " suggested" : ""}" data-id="${esc(s.id)}">
       <span class="wiz-txt"><span class="t">${esc(s.name)}</span></span>
       <span class="wiz-go" aria-hidden="true">›</span>
     </button>`).join("") || `<div class="muted center">No stations match.</div>`);
+  const cd = $("#wiz-confirm-dest");
+  if (cd && sug) cd.onclick = () => pickWizStation(sug.id);
   $("#wiz-rev").onclick = () => { wizStationRev = !wizStationRev; renderWizardList(); };
   list.querySelectorAll(".wiz-row").forEach(b => b.onclick = () => pickWizStation(b.dataset.id));
+}
+
+// The most likely destination: the downtown terminal (unless the rider already
+// boards there, in which case the far terminal).
+function suggestedDest() {
+  if (!wiz || !wiz.sts.length) return null;
+  const oriented = orientDowntownLast(wiz.sts);
+  const downtown = oriented[oriented.length - 1], far = oriented[0];
+  const dest = (wiz.from && downtown.id !== wiz.from.id) ? downtown : far;
+  return (wiz.from && dest.id === wiz.from.id) ? null : dest;
 }
 
 // Two-tap confirm (replaces confirm() dialogs, which the Tesla browser won't show).
@@ -668,7 +612,7 @@ function pickWizStation(id) {
   S.routes.push(r);
   S.activeRouteId = r.id;
   persist(); syncPush();
-  wiz.saved = r; // step 4 configures reminders/briefing against this route
+  wiz.saved = r; // step 4 offers alerts + briefing for this route
   // Route saved; one last screen offers alerts, reminders, and the briefing.
   // Browsers without notification support (the Tesla) skip it: none of it can work there.
   if (!("Notification" in window)) return finishWizard();
@@ -682,31 +626,16 @@ const WIZ_ICONS = [
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></svg>`,
 ];
 
-// Step 4: each feature is its own opt-in with its preferences asked right here.
-// Nothing is enabled unless the rider turns it on.
+// Step 4: opt in to alerts and/or the morning briefing. Nothing turns on unless
+// the rider asks; everything here is also editable later under the settings cog.
 function renderWizardFeatures() {
   const list = $("#wiz-list");
   const r = wiz.saved;
-  const [bell, clock, sun] = WIZ_ICONS;
+  const [bell, , sun] = WIZ_ICONS;
   list.innerHTML = `
     <div class="feat">${bell}<div><b>Delay alerts</b>
       <span>A push the moment your train is delayed or cancelled, even when the app is closed.</span>
       <label class="check"><input type="checkbox" id="wf-alerts"> Alert me about delays and cancellations</label>
-    </div></div>
-    <div class="feat">${clock}<div><b>Departure reminders</b>
-      <span>A heads-up before a train you ride, live delay included.</span>
-      <label class="check"><input type="checkbox" id="wf-rem"> Remind me before a train</label>
-      <div id="wf-rem-cfg" class="feat-cfg hidden">
-        <label>Direction <select id="wf-rem-dir">
-          <option value="HW">To ${esc(r.workName)}</option>
-          <option value="WH">To ${esc(r.homeName)}</option>
-        </select></label>
-        <label>Train <select id="wf-rem-train"><option value="">Loading trains…</option></select><span id="wf-rem-sched" class="sched-hint"></span></label>
-        <div class="grid2">
-          <label>Notify before <select id="wf-rem-lead"><option value="10">10 min</option><option value="15" selected>15 min</option><option value="20">20 min</option><option value="30">30 min</option></select></label>
-          <label>Days <select id="wf-rem-days"><option value="wd">Weekdays</option><option value="all">Every day</option></select></label>
-        </div>
-      </div>
     </div></div>
     <div class="feat">${sun}<div><b>Morning briefing</b>
       <span>One daily summary before you leave: your first trains and any alerts on the line.</span>
@@ -718,44 +647,18 @@ function renderWizardFeatures() {
     <div class="feat-actions"><button id="wiz-finish" class="primary">Continue</button></div>
     <p id="wf-note" class="muted small center-note"></p>`;
 
-  let wfTrains = [];
-  const loadTrains = async () => {
-    const sel = $("#wf-rem-train");
-    wfTrains = [];
-    sel.innerHTML = `<option value="">Loading trains…</option>`;
-    const [from, to] = $("#wf-rem-dir").value === "HW" ? [r.home, r.work] : [r.work, r.home];
-    const sched = remSchedFor($("#wf-rem-days").value);
-    $("#wf-rem-sched").textContent = sched.label;
-    try {
-      const data = await api(`/api/timetable?route=${encodeURIComponent(r.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${sched.date}`);
-      wfTrains = (data.trains || []).filter(t => t.depSec != null);
-      sel.innerHTML = wfTrains.length
-        ? wfTrains.map(t => `<option value="${t.depSec}">${esc(t.dep)} · ${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}</option>`).join("")
-        : `<option value="">No trains found</option>`;
-    } catch { sel.innerHTML = `<option value="">Couldn't load trains. Check connection</option>`; }
-  };
-  $("#wf-rem").onchange = e => {
-    $("#wf-rem-cfg").classList.toggle("hidden", !e.target.checked);
-    if (e.target.checked && !wfTrains.length) loadTrains();
-  };
-  $("#wf-rem-dir").onchange = loadTrains;
-  $("#wf-rem-days").onchange = loadTrains; // weekday vs every-day lists different schedules
   $("#wf-brief").onchange = e => $("#wf-brief-cfg").classList.toggle("hidden", !e.target.checked);
-  ["#wf-rem-dir", "#wf-rem-train", "#wf-rem-lead", "#wf-rem-days"].forEach(s => enhanceSelect($(s)));
   enhanceTime($("#wf-brief-time"));
 
   const note = m => { $("#wf-note").textContent = m; };
   $("#wiz-finish").onclick = async () => {
     const n = S.nudges || (S.nudges = {});
     const wantAlerts = $("#wf-alerts").checked;
-    const wantRem = $("#wf-rem").checked;
     const wantBrief = $("#wf-brief").checked;
-    if (!wantAlerts && !wantRem && !wantBrief) {
+    if (!wantAlerts && !wantBrief) {
       n.notif = n.notif || "skipped"; persist();
       return finishWizard();
     }
-    const remTrain = wantRem ? wfTrains.find(t => Number(t.depSec) === Number($("#wf-rem-train").value)) : null;
-    if (wantRem && !remTrain) return note("Pick a train for the reminder, or untick it.");
     // second tap after a denial proceeds without notifications
     if ($("#wiz-finish").dataset.denied) { persist(); return finishWizard(); }
     let granted = false;
@@ -768,19 +671,6 @@ function renderWizardFeatures() {
       return;
     }
     S.notify = true; n.notif = "on";
-    if (remTrain) {
-      const [from, to, fromName, toName] = $("#wf-rem-dir").value === "HW"
-        ? [r.home, r.work, r.homeName, r.workName]
-        : [r.work, r.home, r.workName, r.homeName];
-      S.reminders = S.reminders || [];
-      S.reminders.push({
-        id: "rem" + Date.now(), routeId: r.id, line: r.line,
-        from, to, fromName, toName,
-        depSec: Number(remTrain.depSec), trainNo: trainNoShort(remTrain.trainNo), depLabel: remTrain.dep,
-        lead: Number($("#wf-rem-lead").value),
-        days: $("#wf-rem-days").value === "all" ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5],
-      });
-    }
     if (wantBrief) {
       const time = $("#wf-brief-time").value || "06:45";
       const [h, m] = time.split(":").map(Number);
@@ -854,15 +744,18 @@ function showMain() {
   $("#route-picker").onchange = e => {
     if (e.target.value === "__oneoff") return;
     oneOff = null;
-    S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; showMain();
+    S.activeRouteId = e.target.value; persist(); lastSeen.clear(); notifiedAlerts.clear(); expandedTrain = {}; stripReversed = {}; showMain();
   };
   enhanceSelect($("#route-picker")); // tap-friendly dropdown (Tesla browser)
   const l = lines.find(x => x.id === route.line);
   $("#line-pill").innerHTML = `<span class="line-pill">
     <span class="lp-dot" style="background:${esc(lineColor(route.line))}"></span>
     <span class="lp-txt">${esc(l ? lineLabel(l) : route.line + " Line")}</span></span>`;
-  // Back = line selection (switch route / start over); cog = notifications & settings.
-  $("#back-btn").onclick = () => { stopPolling(); showWizard("board"); };
+  // Back chevron AND the title both open line selection; cog opens notifications/settings.
+  const toLines = () => { stopPolling(); showWizard("board"); };
+  $("#back-btn").onclick = toLines;
+  $("#route-title").onclick = toLines;
+  $("#route-title").onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toLines(); } };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup({ scrollTo: "#sec-notif" }); };
   renderSocial(route);
   loadCache(); // hydrate last-good board so an offline open shows something
@@ -1022,7 +915,6 @@ function render(dirs, offline) {
 
   dirs.forEach(loadWeather); // fill the weather line under each hero (async, optional)
   renderNudge();             // contextual feature discovery (alerts, briefing)
-  maybeStartTour();          // first board ever → skippable coach-mark walkthrough
 
   const anyAlert = seen.size > 0;
   const cancelledNext = dirs.some(d => lastData[d]?.trains?.[0]?.cancelled);
@@ -1036,17 +928,37 @@ function render(dirs, offline) {
 // reverse toggle can repaint from cached data without re-firing alert toasts.
 function paintContent(dirs, offline) {
   $("#content").innerHTML = dirs.map(d => sectionHtml(d)).join("") || `<div class="muted center">No data.</div>`;
+  // Hero "Stops & arrival times" toggle (collapsed by default).
+  $("#content").querySelectorAll(".stops-toggle").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const key = b.dataset.key;
+    expandedTrain[key] = !expandedTrain[key];
+    const wrap = b.closest(".stops-wrap");
+    wrap.classList.toggle("open", expandedTrain[key]);
+    b.setAttribute("aria-expanded", expandedTrain[key]);
+    b.querySelector(".st-lbl").innerHTML = expandedTrain[key] ? "Hide stops" : "Stops &amp; arrival times";
+    if (expandedTrain[key]) scrollStripToTrain(wrap);
+  });
+  // Subsequent trains: tap the row to expand its own stop list.
+  $("#content").querySelectorAll(".trip-row").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const key = b.dataset.key;
+    expandedTrain[key] = !expandedTrain[key];
+    b.closest(".trip").classList.toggle("open", expandedTrain[key]);
+    b.setAttribute("aria-expanded", expandedTrain[key]);
+  });
+  // Reverse the stop order (repaint only — no refetch, no re-toast).
   $("#content").querySelectorAll(".rs-rev").forEach(b => b.onclick = e => {
     e.stopPropagation();
-    const d = b.dataset.dir;
-    stripReversed[d] = !stripReversed[d];
-    paintContent(dirs, offline); // repaint only — no refetch, no re-toast
+    stripReversed[b.dataset.dir] = !stripReversed[b.dataset.dir];
+    paintContent(dirs, offline);
   });
-  // Keep the train marker in view within each scrolling strip.
-  $("#content").querySelectorAll(".rs-body").forEach(body => {
-    const m = body.querySelector(".rs-train");
-    if (m) body.scrollTop = Math.max(0, parseFloat(m.style.top || "0") - body.clientHeight / 2);
-  });
+  // Keep the train marker in view within any already-open hero strip.
+  $("#content").querySelectorAll(".stops-wrap.open").forEach(scrollStripToTrain);
+}
+function scrollStripToTrain(wrap) {
+  const body = wrap.querySelector(".rs-body"), m = wrap.querySelector(".rs-train");
+  if (body && m) body.scrollTop = Math.max(0, parseFloat(m.style.top || "0") - body.clientHeight / 2);
 }
 
 // ---------- alert splash toasts (point: transient, once-per-day) ----------
@@ -1099,11 +1011,13 @@ function orientDowntownLast(sts) {
 }
 
 // ---------- route diagram (vertical strip): readable stop names + live train ----------
-// Replaces the old horizontal journey bar + collapsible stop list. Shows every
-// stop on the trip with its time, the board/arrive ends, and the train's position
-// (live GPS, schedule estimate once en route, or waiting at the origin).
+// Every stop named with its time, board/arrive ends marked, skipped stops dimmed,
+// and the train's position shown by a dot on the rail (status text lives in the
+// header, so nothing overlaps a station name). Collapsed by default via stopsBlock.
 const ROW_H = 34;
-function routeStrip(data, train, d) {
+let expandedTrain = {}; // "dir:tripId" -> whether this train's stop list is open
+
+function routeStripInner(data, train, d, withMarker) {
   let sts = (data.stations || []).slice();
   if (!sts.length) return "";
   const route = activeRoute();
@@ -1112,17 +1026,19 @@ function routeStrip(data, train, d) {
   if (sts[0].id !== fromId) sts.reverse();      // canonical order: origin → destination
   const n = sts.length;
 
-  // train progress as a fraction along origin→destination
+  // train progress as a fraction along origin→destination (only for the next train)
   let frac = null, mode = null;
-  const pos = data.position && data.position.tripId === train.tripId && data.position.lat != null ? data.position : null;
-  if (pos) {
-    let best = 0, bd = Infinity;
-    sts.forEach((s, i) => { if (s.lat == null) return; const dd = (s.lat - pos.lat) ** 2 + (s.lon - pos.lon) ** 2; if (dd < bd) { bd = dd; best = i; } });
-    frac = best / (n - 1); mode = "live";
-  } else if (Date.now() >= train.depEpochMs && Date.now() < train.arrEpochMs) {
-    frac = Math.min(0.98, (Date.now() - train.depEpochMs) / Math.max(1, train.arrEpochMs - train.depEpochMs)); mode = "est";
-  } else if (Date.now() < train.depEpochMs) {
-    frac = 0; mode = "pre";
+  if (withMarker) {
+    const pos = data.position && data.position.tripId === train.tripId && data.position.lat != null ? data.position : null;
+    if (pos) {
+      let best = 0, bd = Infinity;
+      sts.forEach((s, i) => { if (s.lat == null) return; const dd = (s.lat - pos.lat) ** 2 + (s.lon - pos.lon) ** 2; if (dd < bd) { bd = dd; best = i; } });
+      frac = best / (n - 1); mode = "live";
+    } else if (Date.now() >= train.depEpochMs && Date.now() < train.arrEpochMs) {
+      frac = Math.min(0.98, (Date.now() - train.depEpochMs) / Math.max(1, train.arrEpochMs - train.depEpochMs)); mode = "est";
+    } else if (Date.now() < train.depEpochMs) {
+      frac = 0; mode = "pre";
+    }
   }
 
   const served = new Set((train.stops || []).map(s => s.id));
@@ -1137,24 +1053,41 @@ function routeStrip(data, train, d) {
     const on = served.has(s.id) || isFrom || isTo;
     return `<div class="rs-stop ${on ? "on" : "off"}${isFrom ? " from" : ""}${isTo ? " to" : ""}">
       <span class="rs-rail"><span class="rs-dot"></span></span>
-      <span class="rs-name">${esc(s.name)}${isFrom ? `<span class="rs-tag">board</span>` : isTo ? `<span class="rs-tag">arrive</span>` : ""}</span>
+      <span class="rs-name">${esc(s.name)}</span>
+      ${isFrom || isTo ? `<span class="rs-tag">${isFrom ? "board" : "arrive"}</span>` : ""}
       <span class="rs-time">${on ? esc(times[s.id] || "·") : "skips"}</span>
     </div>`;
   }).join("");
 
-  let marker = "";
+  let marker = "", status = "";
   if (fracView != null) {
     const y = fracView * (n - 1) * ROW_H + ROW_H / 2;
-    const lbl = mode === "live" ? "live" : mode === "est" ? "en route" : `departs ${esc(train.dep)}`;
-    marker = `<div class="rs-train ${mode}" style="top:${y.toFixed(0)}px"><span class="rs-train-dot ${mode === "live" ? "pulse" : ""}"></span><span class="rs-train-lbl">${lbl}</span></div>`;
+    marker = `<div class="rs-train ${mode}" style="top:${y.toFixed(0)}px"><span class="rs-train-dot ${mode === "live" ? "pulse" : ""}"></span></div>`;
+    const stxt = mode === "live" ? "● live position" : mode === "est" ? "● en route" : `departs ${esc(train.dep)}`;
+    status = `<span class="rs-status ${mode}">${stxt}</span>`;
   }
 
   return `<div class="rs" data-dir="${d}">
     <div class="rs-head">
       <span class="rs-head-title">${esc(view[0].name)} <span class="arrow">→</span> ${esc(view[n - 1].name)}</span>
+      ${status}
       <button class="rs-rev" data-dir="${d}" title="Reverse order">⇅</button>
     </div>
     <div class="rs-body">${rows}${marker}</div>
+  </div>`;
+}
+
+// Collapsible wrapper (stops hidden by default) used on the next-train hero.
+function stopsBlock(data, train, d) {
+  const inner = routeStripInner(data, train, d, true);
+  if (!inner) return "";
+  const key = d + ":" + train.tripId;
+  const open = !!expandedTrain[key];
+  return `<div class="stops-wrap${open ? " open" : ""}">
+    <button class="stops-toggle" data-key="${esc(key)}" aria-expanded="${open}">
+      <span class="st-lbl">${open ? "Hide stops" : "Stops &amp; arrival times"}</span><span class="caret">▾</span>
+    </button>
+    <div class="stops-collapse">${inner}</div>
   </div>`;
 }
 
@@ -1219,19 +1152,6 @@ async function renderTimetable(dirs, seq = reqSeq) {
 // ---------- date helpers (local time; riders are in Chicago) ----------
 function fmtISO(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
-// Which schedule a reminder's train picker should list. A "Weekdays" reminder
-// must offer weekday trains even when it's being set up on a weekend (today's
-// timetable would miss every weekday train), so roll forward to the next
-// weekday. "Every day" lists today's schedule.
-function remSchedFor(daysVal) {
-  let d = new Date();
-  if (daysVal === "wd") while (d.getDay() === 0 || d.getDay() === 6) d = addDays(d, 1);
-  const wd = d.getDay();
-  return {
-    date: fmtISO(d).replace(/-/g, ""),
-    label: wd === 0 ? "Sunday schedule" : wd === 6 ? "Saturday schedule" : "Weekday schedule",
-  };
-}
 function todayISO() { return fmtISO(new Date()); }
 function isoPlus(n) { return fmtISO(addDays(new Date(), n)); }
 function quickDays() {
@@ -1281,17 +1201,23 @@ function sectionHtml(d) {
             : `<div class="flapboard" data-dep="${next.depEpochMs}" data-sig="${flapSig(fmtFlap(next.depEpochMs))}">${flapCards(next.depEpochMs)}</div>`}
         </div>
       </div>
-      ${next.cancelled ? "" : routeStrip(data, next, d)}
+      ${next.cancelled ? "" : stopsBlock(data, next, d)}
     </div>
     ${hint ? `<div class="hint">Express Train ${esc(trainNoShort(hint.trainNo))} leaves at ${hint.dep} (in ${hint.minutes} min). Worth waiting?</div>` : ""}
     <div class="list">
-      ${rest.map(t => `
-        <div class="row ${t.cancelled ? "cancelled" : ""}${t.delayMin > 0 ? " late" : ""}">
-          <span class="dep">${t.delayMin > 0 ? `<span class="was">${t.depScheduled}</span>` : ""}${t.dep}</span>
-          <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}${miniStatus(t)}</span>
-          <span class="right">${t.cancelled ? "Cancelled"
-            : `<span class="jt" title="Total journey time">${JT_ICON}${fmtDur(Math.round((t.arrEpochMs - t.depEpochMs) / 60000))}</span>`}</span>
-        </div>`).join("")}
+      ${rest.map(t => {
+        const key = d + ":" + t.tripId;
+        const open = !!expandedTrain[key];
+        return `<div class="trip${open ? " open" : ""}">
+          <button class="row trip-row ${t.cancelled ? "cancelled" : ""}${t.delayMin > 0 ? " late" : ""}" data-key="${esc(key)}" aria-expanded="${open}">
+            <span class="dep">${t.delayMin > 0 ? `<span class="was">${t.depScheduled}</span>` : ""}${t.dep}</span>
+            <span class="meta">${t.class === "E" ? "Express" : "Local"} · Train ${esc(trainNoShort(t.trainNo))}${miniStatus(t)}</span>
+            <span class="right">${t.cancelled ? "Cancelled"
+              : `<span class="jt" title="Total journey time">${JT_ICON}${fmtDur(Math.round((t.arrEpochMs - t.depEpochMs) / 60000))}</span>`}<span class="caret">▾</span></span>
+          </button>
+          ${t.cancelled ? "" : `<div class="stops-collapse">${routeStripInner(data, t, d, false)}</div>`}
+        </div>`;
+      }).join("")}
     </div>`;
 }
 
@@ -1358,62 +1284,6 @@ function renderNudge() {
     };
     $("#nudge-no").onclick = () => { n.brief = "dismissed"; persist(); renderNudge(); };
   }
-}
-
-// ---------- first-run tour (skippable coach marks over the live board) ----------
-let tourOpen = false;
-
-function maybeStartTour() {
-  if (tourOpen || S.tour || oneOff || ttDate) return;
-  if (!$("#content .hero")) return; // wait until a real board is on screen
-  startTour();
-}
-
-function startTour() {
-  const steps = [
-    ["#content .hero", "Your next train", "Live countdown, delay status, and journey progress. Tap the card to see every stop."],
-    ["#view-tabs", "Live or Schedule", "Flip between the live board and the full timetable for any day, weekends included."],
-    ["#dir-tabs", "Direction", "Inbound, outbound, or both. It follows your morning and evening windows automatically."],
-    ["#oneoff-btn", "One-off trips", "Heading somewhere unusual? Check any two stations without saving a route."],
-    ["#settings-btn", "Settings", "Alerts, departure reminders, the morning briefing, and preferences live here."],
-  ].filter(([sel]) => $(sel));
-  if (!steps.length) { S.tour = "done"; persist(); return; }
-
-  tourOpen = true;
-  const el = document.createElement("div");
-  el.id = "tour"; el.className = "tour-backdrop";
-  el.innerHTML = `<div class="tour-ring"></div>
-    <div class="tour-card"><b></b><p></p>
-      <div class="tour-btns"><button class="ghost" id="tour-skip">Skip tour</button>
-      <button class="primary" id="tour-next"></button></div>
-    </div>`;
-  document.body.appendChild(el);
-
-  let idx = 0;
-  const show = () => {
-    const [sel, title, text] = steps[idx];
-    const t = $(sel);
-    if (!t) return next(); // board re-rendered under us — move on
-    t.scrollIntoView({ block: "center", behavior: "auto" });
-    const r = t.getBoundingClientRect(), pad = 6;
-    const ring = el.querySelector(".tour-ring");
-    ring.style.left = (r.left - pad) + "px";
-    ring.style.top = (r.top - pad) + "px";
-    ring.style.width = (r.width + 2 * pad) + "px";
-    ring.style.height = (r.height + 2 * pad) + "px";
-    el.querySelector("b").textContent = title;
-    el.querySelector("p").textContent = text;
-    $("#tour-next").textContent = idx === steps.length - 1 ? "Done" : `Next · ${idx + 1} of ${steps.length}`;
-    const card = el.querySelector(".tour-card");
-    card.style.left = Math.max(12, Math.min(r.left, window.innerWidth - 312)) + "px";
-    const below = r.bottom + pad + 12;
-    card.style.top = (below + 170 < window.innerHeight ? below : Math.max(12, r.top - pad - 170)) + "px";
-  };
-  const end = state => { S.tour = state; persist(); el.remove(); tourOpen = false; };
-  const next = () => { idx++; idx >= steps.length ? end("done") : show(); };
-  $("#tour-skip").onclick = () => end("skipped");
-  $("#tour-next").onclick = next;
-  show();
 }
 
 // ---------- weather at departure ----------
