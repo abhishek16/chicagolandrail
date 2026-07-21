@@ -608,8 +608,9 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
    with overlapping ones culled. Sized generously so they survive the viewBox→
    screen downscale; counter-scaled by --inv so zoom level doesn't change them. */
 .lmap-line .lmap-lbl { display: none; fill: #FFFFFF; font-weight: 700; font-family: "Overpass", sans-serif;
-  font-size: calc(22px * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(6px * var(--inv, 1)); pointer-events: none; }
-.lmap-line .lmap-term { fill: #98A6B4; font-weight: 700; font-family: "Overpass", sans-serif; font-size: calc(15px * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: 3px; pointer-events: none; }
+  font-size: calc(14px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(4px * var(--px, 1) * var(--inv, 1)); pointer-events: none; }
+.lmap-line .lmap-term { fill: #AEBAC7; font-weight: 700; font-family: "Overpass", sans-serif;
+  font-size: calc(13px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(3.5px * var(--px, 1) * var(--inv, 1)); pointer-events: none; }
 /* hover = highlight only (no camera move): brighten + a slow flowing dash */
 .lmap-line.hovering .lmap-core { stroke-width: 4.6; stroke-dasharray: 16 12; animation: lmapFlow 1.4s linear infinite; }
 .lmap-line.hovering .lmap-glow { stroke-opacity: 0.6; stroke-width: 12; }
@@ -630,7 +631,7 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .lmap-line .lmap-stn.to { fill: #fff; stroke: var(--c); stroke-width: 2.5; r: 4.5; }
 .lmap-line .lmap-lbl.pick { display: block; fill: #fff; font-weight: 800; }
 .lmap-hub { fill: #0A0F15; stroke: #fff; stroke-width: 2.2; }
-.lmap-hub-lbl { fill: #fff; font-weight: 800; font-family: "Overpass", sans-serif; font-size: calc(12px * var(--inv, 1)); letter-spacing: 0.12em; }
+.lmap-hub-lbl { fill: #fff; font-weight: 800; font-family: "Overpass", sans-serif; font-size: calc(12px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(3px * var(--px, 1)); letter-spacing: 0.10em; }
 .lmap-train-halo { fill: #2FD53B; opacity: 0.25; animation: lmapPulse 1.6s ease-in-out infinite; }
 .lmap-train { fill: #fff; stroke: #2FD53B; stroke-width: 2.4; }
 @keyframes lmapPulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.07; } }

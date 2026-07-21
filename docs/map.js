@@ -142,6 +142,17 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
   host.innerHTML = "";
   host.appendChild(svg);
 
+  // Keep label text a constant SCREEN size on any device: --px = viewBox units per
+  // rendered CSS pixel. Labels are sized in viewBox units, so without this a wide
+  // desktop map renders them tiny; with it they're the same px everywhere.
+  function measure() {
+    const w = svg.getBoundingClientRect().width;
+    if (w > 0) svg.style.setProperty("--px", (W / w).toFixed(3));
+  }
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(measure).observe(svg);
+  else if (typeof window !== "undefined" && window.addEventListener) window.addEventListener("resize", measure);
+  if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(measure); else measure();
+
   // Tapping empty water releases focus — but only where that makes sense (a future
   // "explore" view). Off during onboarding, where Back drives the step/focus, so a
   // stray water tap can't desync the map from the wizard's current question.
