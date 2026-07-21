@@ -599,33 +599,33 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 /* the pan/zoom camera — a long, gently-decelerating glide into a line (easeOutExpo) */
 .lmap-cam { transform-origin: 0 0; transition: transform 1.05s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform; }
 .lmap-lake { fill: #0D1926; stroke: #17293A; stroke-width: 1.4; }
-.lmap-line .lmap-hit { fill: none; stroke: #000; stroke-opacity: 0; stroke-width: 22; cursor: pointer; }
+.lmap-line .lmap-hit { fill: none; stroke: #000; stroke-opacity: 0; stroke-width: 15; cursor: pointer; }
 /* lines a touch bolder so they read on the dark water */
 .lmap-line .lmap-glow { fill: none; stroke: var(--c); stroke-opacity: 0.2; stroke-width: 8.5; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
 .lmap-line .lmap-core { fill: none; stroke: var(--c); stroke-width: 2.8; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
 .lmap-line .lmap-stn { fill: #0A0F15; stroke: var(--c); stroke-width: 1.2; pointer-events: none; }
-.lmap-line .lmap-lbl { display: none; fill: #F3F6F9; font-weight: 700; font-family: "Overpass", sans-serif;
-  font-size: calc(11px * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(3.5px * var(--inv, 1)); pointer-events: none;
-  transition: opacity 0.4s ease; }
-.lmap-line .lmap-term { fill: #7E8A97; font-weight: 700; font-family: "Overpass", sans-serif; font-size: calc(10px * var(--inv, 1)); pointer-events: none; }
-/* hover / focus preview: trace the route with a slow flowing dash and brighten it */
-.lmap-line.hovering .lmap-core { stroke-dasharray: 16 12; animation: lmapFlow 1.4s linear infinite; }
-.lmap-line.hovering .lmap-glow { stroke-opacity: 0.5; }
+/* Station labels only appear on the FOCUSED (picked) line — big and readable,
+   with overlapping ones culled. Sized generously so they survive the viewBox→
+   screen downscale; counter-scaled by --inv so zoom level doesn't change them. */
+.lmap-line .lmap-lbl { display: none; fill: #FFFFFF; font-weight: 700; font-family: "Overpass", sans-serif;
+  font-size: calc(22px * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(6px * var(--inv, 1)); pointer-events: none; }
+.lmap-line .lmap-term { fill: #98A6B4; font-weight: 700; font-family: "Overpass", sans-serif; font-size: calc(15px * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: 3px; pointer-events: none; }
+/* hover = highlight only (no camera move): brighten + a slow flowing dash */
+.lmap-line.hovering .lmap-core { stroke-width: 4.6; stroke-dasharray: 16 12; animation: lmapFlow 1.4s linear infinite; }
+.lmap-line.hovering .lmap-glow { stroke-opacity: 0.6; stroke-width: 12; }
 @keyframes lmapFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -28; } }
 
-/* when zoomed into a line (hover or focus), show its station names — but hide any
-   that would overlap (cullLabels marks them) so the visible ones stay readable */
-.lmap-line.on .lmap-lbl, .lmap-line.hovering .lmap-lbl { display: block; }
+.lmap-line.on .lmap-lbl { display: block; }
 .lmap-line .lmap-lbl.culled { display: none; }
 /* hovering a dot always reveals its name, even a culled one */
-.lmap.focus .lmap-line.on .lmap-stn:hover + .lmap-lbl { display: block; fill: #fff; }
-.lmap-line.on .lmap-term, .lmap-line.hovering .lmap-term { display: none; }
+.lmap.focus .lmap-line.on .lmap-stn:hover + .lmap-lbl { display: block; }
+.lmap-line.on .lmap-term { display: none; }
 
-.lmap.focus .lmap-line { opacity: 0.08; transition: opacity 0.6s ease; }
+.lmap.focus .lmap-line { opacity: 0.06; transition: opacity 0.6s ease; }
 .lmap.focus .lmap-line.on { opacity: 1; }
-.lmap.focus .lmap-line.on .lmap-core { stroke-width: 3.4; }
-.lmap.focus .lmap-line.on .lmap-glow { stroke-opacity: 0.32; }
-.lmap.focus .lmap-line.on .lmap-stn { r: 3; cursor: pointer; pointer-events: auto; }
+.lmap.focus .lmap-line.on .lmap-core { stroke-width: 4; }
+.lmap.focus .lmap-line.on .lmap-glow { stroke-opacity: 0.4; stroke-width: 12; }
+.lmap.focus .lmap-line.on .lmap-stn { r: 3.4; cursor: pointer; pointer-events: auto; }
 .lmap-line .lmap-stn.from { fill: var(--c); stroke: #fff; stroke-width: 2; r: 4.5; }
 .lmap-line .lmap-stn.to { fill: #fff; stroke: var(--c); stroke-width: 2.5; r: 4.5; }
 .lmap-line .lmap-lbl.pick { display: block; fill: #fff; font-weight: 800; }

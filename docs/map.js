@@ -120,11 +120,11 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
 
     const hit = g.querySelector(".lmap-hit");
     hit.addEventListener("click", e => { e.stopPropagation(); onLine && onLine(l.id); });
-    // Desktop hover: glide into the line and reveal its station names. Debounced so
-    // sweeping the mouse across the fan of lines near downtown doesn't jump around —
-    // the camera only glides once the pointer settles on a line. No-op on touch.
-    hit.addEventListener("mouseenter", () => scheduleHover(l.id));
-    hit.addEventListener("mouseleave", () => scheduleHover(null));
+    // Desktop hover just HIGHLIGHTS the line — it never moves the camera. (Zooming
+    // on hover pans the map under a stationary cursor, which lands the cursor on a
+    // different line and re-triggers → the jumping. The glide happens on tap/focus.)
+    hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) ctrl.hover(l.id); });
+    hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) ctrl.hover(null); });
     cam.appendChild(g);
     groups[l.id] = { g, stnEls };
   }
@@ -155,15 +155,6 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     cam.appendChild(trainLayer);
     cam.appendChild(cam.querySelector(".lmap-hub"));
     cam.appendChild(hubLbl);
-  }
-
-  // Debounced hover: only glide once the pointer settles on a line (~170ms), and
-  // wait a touch longer before releasing back to the system view.
-  let hoverTimer = null;
-  function scheduleHover(id) {
-    clearTimeout(hoverTimer);
-    if (svg.classList.contains("focus")) return; // picking stations — no hover preview
-    hoverTimer = setTimeout(() => ctrl.hover(id), id ? 170 : 320);
   }
 
   // Hide station labels that would overlap once zoomed, so the ones shown stay
@@ -206,24 +197,21 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
       };
     },
     focus(lineId) {
-      clearTimeout(hoverTimer);
       svg.classList.add("focus");
       for (const id in groups) groups[id].g.classList.toggle("on", id === lineId);
       raiseLine(lineId);
-      ctrl.zoomTo(lineId); // glide in so this line's station names are readable
+      ctrl.zoomTo(lineId); // the one place the camera glides: after you pick a line
     },
     unfocus() {
-      clearTimeout(hoverTimer);
       svg.classList.remove("focus");
       for (const id in groups) groups[id].g.classList.remove("on", "hovering");
       ctrl.resetZoom();
       ctrl.select(null);
     },
-    // desktop hover preview (system view): zoom into a line + show its names
+    // hover = highlight only. Brighten + raise the line; NEVER move the camera.
     hover(lineId) {
       for (const id in groups) groups[id].g.classList.toggle("hovering", id === lineId);
-      if (lineId) { raiseLine(lineId); ctrl.zoomTo(lineId); }
-      else ctrl.resetZoom();
+      if (lineId) raiseLine(lineId);
     },
     zoomTo(lineId) {
       const b = ctrl.boundsOf(lineId);
