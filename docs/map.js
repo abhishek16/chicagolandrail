@@ -120,10 +120,11 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
 
     const hit = g.querySelector(".lmap-hit");
     hit.addEventListener("click", e => { e.stopPropagation(); onLine && onLine(l.id); });
-    // Desktop hover: zoom into the line and reveal its station names (a preview of
-    // the route). No-op on touch (no hover); focus() does the same on tap.
-    hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) ctrl.hover(l.id); });
-    hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) ctrl.hover(null); });
+    // Desktop hover: glide into the line and reveal its station names. Debounced so
+    // sweeping the mouse across the fan of lines near downtown doesn't jump around —
+    // the camera only glides once the pointer settles on a line. No-op on touch.
+    hit.addEventListener("mouseenter", () => scheduleHover(l.id));
+    hit.addEventListener("mouseleave", () => scheduleHover(null));
     cam.appendChild(g);
     groups[l.id] = { g, stnEls };
   }
@@ -156,6 +157,36 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     cam.appendChild(hubLbl);
   }
 
+  // Debounced hover: only glide once the pointer settles on a line (~170ms), and
+  // wait a touch longer before releasing back to the system view.
+  let hoverTimer = null;
+  function scheduleHover(id) {
+    clearTimeout(hoverTimer);
+    if (svg.classList.contains("focus")) return; // picking stations — no hover preview
+    hoverTimer = setTimeout(() => ctrl.hover(id), id ? 170 : 320);
+  }
+
+  // Hide station labels that would overlap once zoomed, so the ones shown stay
+  // readable (greedy: keep picked ends + terminals first, then along the line).
+  // Positions are computed from each label's own bbox × the final camera transform,
+  // so it's correct immediately (independent of the in-flight glide).
+  function cullLabels(lineId, s, tx, ty) {
+    const grp = groups[lineId]; if (!grp) return;
+    const els = grp.stnEls, ids = Object.keys(els);
+    for (const id of ids) els[id].lbl.classList.remove("culled");
+    const picks = [...svg.querySelectorAll(".lmap-stn.from,.lmap-stn.to")].map(n => n.getAttribute("data-id"));
+    const order = [...new Set([...picks, ids[0], ids[ids.length - 1], ...ids])];
+    const placed = [];
+    for (const id of order) {
+      const lbl = els[id].lbl;
+      let bb; try { bb = lbl.getBBox(); } catch { return; } // no layout (tests) → leave all shown
+      if (!bb || !bb.width) return;
+      const r = { l: bb.x * s + tx, r: (bb.x + bb.width) * s + tx, t: bb.y * s + ty, b: (bb.y + bb.height) * s + ty };
+      const clash = placed.some(p => !(r.r < p.l - 4 || r.l > p.r + 4 || r.b < p.t - 3 || r.t > p.b + 3));
+      if (clash) lbl.classList.add("culled"); else placed.push(r);
+    }
+  }
+
   // ---- controller ----
   const ctrl = {
     element: svg,
@@ -175,12 +206,14 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
       };
     },
     focus(lineId) {
+      clearTimeout(hoverTimer);
       svg.classList.add("focus");
       for (const id in groups) groups[id].g.classList.toggle("on", id === lineId);
       raiseLine(lineId);
-      ctrl.zoomTo(lineId); // zoom in so this line's station names are readable
+      ctrl.zoomTo(lineId); // glide in so this line's station names are readable
     },
     unfocus() {
+      clearTimeout(hoverTimer);
       svg.classList.remove("focus");
       for (const id in groups) groups[id].g.classList.remove("on", "hovering");
       ctrl.resetZoom();
@@ -195,16 +228,19 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     zoomTo(lineId) {
       const b = ctrl.boundsOf(lineId);
       if (!b) return;
-      const pad = 0.14;
+      const pad = 0.16;
       const bw = Math.max(b.maxX - b.minX, 1), bh = Math.max(b.maxY - b.minY, 1);
       let s = Math.min((W * (1 - 2 * pad)) / bw, (H * (1 - 2 * pad)) / bh);
-      s = Math.max(1.2, Math.min(s, 4));
+      s = Math.max(1.15, Math.min(s, 5));
       const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
-      cam.style.transform = `translate(${r1(W / 2 - cx * s)}px, ${r1(H / 2 - cy * s)}px) scale(${s.toFixed(3)})`;
+      const tx = W / 2 - cx * s, ty = H / 2 - cy * s;
+      cam.style.transform = `translate(${r1(tx)}px, ${r1(ty)}px) scale(${s.toFixed(3)})`;
       svg.style.setProperty("--inv", (1 / s).toFixed(3)); // counter-scale labels to keep them ~constant size
       svg.classList.add("zoomed");
+      cullLabels(lineId, s, tx, ty);
     },
     resetZoom() {
+      svg.querySelectorAll(".lmap-lbl.culled").forEach(n => n.classList.remove("culled"));
       cam.style.transform = "";
       svg.style.setProperty("--inv", "1");
       svg.classList.remove("zoomed");
