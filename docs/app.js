@@ -30,7 +30,7 @@ const store = {
   },
   save(s) { localStorage.setItem("mct", JSON.stringify(s)); },
 };
-let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0, tour: null }, store.load());
+let S = Object.assign({ routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0, tour: null, alertsSeen: null }, store.load());
 const persist = () => store.save(S);
 
 let lines = [], lastData = {}, lastSeen = new Map(), pollTimer = null, tickTimer = null;
@@ -46,7 +46,7 @@ let expandedStops = {};          // direction -> whether the hero's stop list is
 let meta = null;                 // /api/meta freshness, for the stale-data warning
 let weatherCache = new Map();    // stationId -> { periods, at }
 let oneOff = null;               // transient one-off trip (not saved), overrides active route
-let boardMap = null, boardMapLine = null, boardStops = {}; // live-board route map + per-line geometry cache
+let stripReversed = {};          // per-direction reverse flag for the route diagram (point: reversible list)
 let ooStations = [];             // stations for the one-off line picker
 
 // ---------- persistent offline cache (survives reload/underground) ----------
@@ -448,8 +448,8 @@ async function resetApp() {
     if (k === "mct" || k.startsWith("mct_cache_")) gone.push(k);
   }
   gone.forEach(k => localStorage.removeItem(k));
-  S = { routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0, tour: null };
-  oneOff = null; lastData = {}; ttDate = null;
+  S = { routes: [], activeRouteId: null, settings: null, override: { active: false }, notify: false, reminders: [], briefing: null, nudges: {}, visits: 0, tour: null, alertsSeen: null };
+  oneOff = null; lastData = {}; ttDate = null; stripReversed = {};
   lastSeen.clear(); notifiedAlerts.clear(); expandedStops = {}; weatherCache.clear();
   showWizard("boot");
 }
@@ -475,7 +475,7 @@ async function ensureMapGeo() {
 
 function showWizard(cameFrom = "boot") {
   wiz = { step: 1, cameFrom, sts: [] };
-  wizMap = null;
+  wizMap = null; wizStationRev = false;
   swapView("wizard");
   applyLineTheme(WIZ_LINE);
   buildWizMap();   // async: draws the map when geometry arrives
@@ -555,6 +555,8 @@ function renderWizard() {
   if (wiz.step === 4) renderWizardFeatures(); else renderWizardList();
 }
 
+let wizStationRev = false; // station list order flip (default: toward downtown)
+
 function renderWizardList() {
   const list = $("#wiz-list");
   const q = $("#wiz-filter").value.trim().toLowerCase();
@@ -567,13 +569,35 @@ function renderWizardList() {
       };
       return;
     }
-    list.innerHTML = lines.map(l => `
+    // Saved routes shown up top as clearly-marked preferences you can jump back to,
+    // plus a one-tap way to wipe everything and start clean.
+    const saved = S.routes.length ? `
+      <div class="wiz-saved">
+        <div class="wiz-section-label">Your saved routes</div>
+        ${S.routes.map(r => {
+          const l = lines.find(x => x.id === r.line);
+          return `<button class="wiz-row saved" data-rid="${esc(r.id)}">
+            <span class="wiz-bar" style="background:${esc(l ? l.color : "#888")}"></span>
+            <span class="wiz-txt"><span class="t">${esc(r.label)}</span><span class="s">${esc(r.line)} · ${esc(r.homeName)} ↔ ${esc(r.workName)}</span></span>
+            <span class="wiz-go" aria-hidden="true">›</span>
+          </button>`;
+        }).join("")}
+        <button class="ghost danger wiz-reset" id="wiz-reset">Erase everything &amp; start fresh</button>
+      </div>
+      <div class="wiz-section-label wiz-add-label">${S.routes.length >= 5 ? "Route limit reached (5)" : "Add another line"}</div>` : "";
+    const lineCards = S.routes.length >= 5 ? "" : lines.map(l => `
       <button class="wiz-row" data-id="${esc(l.id)}">
         <span class="wiz-bar" style="background:${esc(l.color)}"></span>
         <span class="wiz-txt"><span class="t">${esc(l.id)}</span><span class="s">${esc(l.name)}</span></span>
         <span class="wiz-go" aria-hidden="true">›</span>
       </button>`).join("");
-    list.querySelectorAll(".wiz-row").forEach(b => b.onclick = () => pickWizLine(b.dataset.id));
+    list.innerHTML = saved + lineCards;
+    list.querySelectorAll(".wiz-row.saved").forEach(b => b.onclick = () => {
+      oneOff = null; S.activeRouteId = b.dataset.rid; persist(); wiz = null; showMain();
+    });
+    const rb = $("#wiz-reset");
+    if (rb) twoTap(rb, "Tap again to erase everything", () => resetApp());
+    list.querySelectorAll(".wiz-row:not(.saved)").forEach(b => b.onclick = () => pickWizLine(b.dataset.id));
     return;
   }
   if (wiz.loading) { list.innerHTML = `<div class="muted center">Loading stations…</div>`; return; }
@@ -582,14 +606,32 @@ function renderWizardList() {
     $("#wiz-retry").onclick = () => pickWizLine(wiz.line);
     return;
   }
-  const sts = wiz.sts.filter(s =>
+  // Default order runs toward downtown (most riders' morning trip); flip to reverse.
+  let ordered = orientDowntownLast(wiz.sts.slice());
+  if (wizStationRev) ordered = [...ordered].reverse();
+  const sts = ordered.filter(s =>
     (wiz.step === 2 || s.id !== wiz.from.id) && (!q || s.name.toLowerCase().includes(q)));
-  list.innerHTML = sts.map(s => `
+  const bar = `<div class="wiz-listbar">
+    <span class="muted small">${wiz.step === 2 ? "Pick where you board" : "Pick your destination"}</span>
+    <button class="wiz-rev" id="wiz-rev" title="Reverse order">⇅ Reverse</button></div>`;
+  list.innerHTML = bar + (sts.map(s => `
     <button class="wiz-row" data-id="${esc(s.id)}">
       <span class="wiz-txt"><span class="t">${esc(s.name)}</span></span>
       <span class="wiz-go" aria-hidden="true">›</span>
-    </button>`).join("") || `<div class="muted center">No stations match.</div>`;
+    </button>`).join("") || `<div class="muted center">No stations match.</div>`);
+  $("#wiz-rev").onclick = () => { wizStationRev = !wizStationRev; renderWizardList(); };
   list.querySelectorAll(".wiz-row").forEach(b => b.onclick = () => pickWizStation(b.dataset.id));
+}
+
+// Two-tap confirm (replaces confirm() dialogs, which the Tesla browser won't show).
+function twoTap(btn, confirmText, action, ms = 4000) {
+  const original = btn.textContent;
+  let armed = false, timer = null;
+  btn.onclick = () => {
+    if (armed) { clearTimeout(timer); action(); return; }
+    armed = true; btn.textContent = confirmText; btn.classList.add("confirm");
+    timer = setTimeout(() => { armed = false; btn.textContent = original; btn.classList.remove("confirm"); }, ms);
+  };
 }
 
 async function pickWizLine(id) {
@@ -819,9 +861,9 @@ function showMain() {
   $("#line-pill").innerHTML = `<span class="line-pill">
     <span class="lp-dot" style="background:${esc(lineColor(route.line))}"></span>
     <span class="lp-txt">${esc(l ? lineLabel(l) : route.line + " Line")}</span></span>`;
-  // Back = manage routes (top of settings); cog = preferences (direction windows etc).
-  $("#back-btn").onclick = () => { stopPolling(); showSetup(); };
-  $("#settings-btn").onclick = () => { stopPolling(); showSetup({ scrollTo: "#sec-windows" }); };
+  // Back = line selection (switch route / start over); cog = notifications & settings.
+  $("#back-btn").onclick = () => { stopPolling(); showWizard("board"); };
+  $("#settings-btn").onclick = () => { stopPolling(); showSetup({ scrollTo: "#sec-notif" }); };
   renderSocial(route);
   loadCache(); // hydrate last-good board so an offline open shows something
   startPolling();
@@ -948,13 +990,15 @@ function render(dirs, offline) {
     ? `${esc(route.homeName)} <span class="arrow">⇆</span> ${esc(route.workName)}`
     : dirTitle(dirs[0]);
 
-  // alerts (deduped across directions)
-  const seen = new Set(); const alertHtml = [];
+  // alerts → splash toasts: each new alert appears once, fades after 30s, and is
+  // remembered for the rest of the (Chicago) day so it never nags on every poll.
+  const seen = new Set(); const activeAlerts = [];
   for (const d of dirs) for (const a of (lastData[d]?.alerts || [])) {
     if (seen.has(a.id)) continue; seen.add(a.id);
-    alertHtml.push(`<div class="alert">${esc(a.header)}${a.description ? `. ${esc(a.description)}` : ""}</div>`);
+    activeAlerts.push(a);
   }
-  $("#alerts").innerHTML = alertHtml.join("");
+  splashNewAlerts(activeAlerts);
+  updateAlertChip(activeAlerts);
 
   // banner
   const b = $("#banner");
@@ -974,20 +1018,8 @@ function render(dirs, offline) {
     b.className = "banner offline";
   } else b.className = "banner hidden";
 
-  $("#content").innerHTML = dirs.map(d => sectionHtml(d)).join("") || `<div class="muted center">No data.</div>`;
+  paintContent(dirs, offline);
 
-  // Tap the hero card to expand/collapse its full stop list.
-  $("#content").querySelectorAll(".hero[data-dir]").forEach(h => {
-    h.onclick = () => {
-      const dd = h.dataset.dir;
-      expandedStops[dd] = !expandedStops[dd];
-      h.classList.toggle("expanded", expandedStops[dd]);
-      const panel = h.querySelector(".stops-panel");
-      if (panel) panel.classList.toggle("open", expandedStops[dd]);
-    };
-  });
-
-  updateBoardMap(dirs);      // geographic route map with the live train position
   dirs.forEach(loadWeather); // fill the weather line under each hero (async, optional)
   renderNudge();             // contextual feature discovery (alerts, briefing)
   maybeStartTour();          // first board ever → skippable coach-mark walkthrough
@@ -1000,62 +1032,134 @@ function render(dirs, offline) {
   $("#rt-status").innerHTML = first ? (first.realtime ? `<span class="live-dot">live</span>` : "scheduled only") : "";
 }
 
-// Geographic route map on the live board: the rider's line with their two
-// stations marked and the next train shown at its live GPS position when Metra's
-// positions feed is tracking it. Built once per line; only the dot updates on poll.
-// Reuses the existing /api/next payload — no extra Metra calls.
-async function updateBoardMap(dirs) {
-  const host = $("#board-map");
-  const route = activeRoute();
-  if (!host) return;
-  if (ttDate || !route) { host.classList.add("hidden"); return; }
-
-  const seq = reqSeq;
-  let stops = boardStops[route.line];
-  if (!stops) {
-    try { stops = (await api(`/api/stops?route=${encodeURIComponent(route.line)}`)).stations; }
-    catch { host.classList.add("hidden"); return; }
-    if (seq !== reqSeq || activeRoute() !== route || ttDate) return; // route/view changed while loading
-    boardStops[route.line] = stops;
-  }
-  const geo = (stops || []).filter(s => s.lat != null && s.lon != null);
-  if (geo.length < 2) { host.classList.add("hidden"); return; }
-
-  if (boardMapLine !== route.line || !boardMap) {
-    const l = lines.find(x => x.id === route.line) || { id: route.line, name: route.line, color: lineColor(route.line) };
-    try {
-      boardMap = createMap(host, { lines: [l], stopsByLine: { [route.line]: geo }, onLine: () => {}, onStation: () => {} });
-    } catch { host.classList.add("hidden"); boardMap = null; return; }
-    boardMap.focus(route.line);
-    boardMapLine = route.line;
-  }
-  host.classList.remove("hidden");
-  boardMap.select(route.line, { from: route.home, to: route.work });
-
-  // Train dots: only where the positions feed is actually tracking the next train.
-  const dots = []; let anyLive = false;
-  for (const d of dirs) {
-    const data = lastData[d];
-    if (!data || !data.position || data.position.lat == null) continue;
-    const nx = (data.trains || []).find(t => !t.cancelled && data.position.tripId === t.tripId);
-    if (nx) { dots.push({ lat: data.position.lat, lon: data.position.lon }); anyLive = true; }
-  }
-  boardMap.setTrains(route.line, dots);
-
-  let cap = host.querySelector(".board-map-cap");
-  if (!cap) { cap = document.createElement("div"); cap.className = "board-map-cap"; host.appendChild(cap); }
-  cap.innerHTML = anyLive
-    ? `<span class="bm-live">● live train position</span><span>${esc(lineLabelShort(route))}</span>`
-    : `<span class="bm-sched">${esc(route.homeName)} → ${esc(route.workName)}</span><span>${esc(lineLabelShort(route))}</span>`;
+// Paint the direction sections. Kept separate from render() so the route-strip
+// reverse toggle can repaint from cached data without re-firing alert toasts.
+function paintContent(dirs, offline) {
+  $("#content").innerHTML = dirs.map(d => sectionHtml(d)).join("") || `<div class="muted center">No data.</div>`;
+  $("#content").querySelectorAll(".rs-rev").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const d = b.dataset.dir;
+    stripReversed[d] = !stripReversed[d];
+    paintContent(dirs, offline); // repaint only — no refetch, no re-toast
+  });
+  // Keep the train marker in view within each scrolling strip.
+  $("#content").querySelectorAll(".rs-body").forEach(body => {
+    const m = body.querySelector(".rs-train");
+    if (m) body.scrollTop = Math.max(0, parseFloat(m.style.top || "0") - body.clientHeight / 2);
+  });
 }
-function lineLabelShort(route) {
-  const l = lines.find(x => x.id === route.line);
-  return l ? `${l.id}` : route.line;
+
+// ---------- alert splash toasts (point: transient, once-per-day) ----------
+function chicagoDayKey() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date()).replace(/-/g, "");
+}
+function splashNewAlerts(alerts) {
+  if (!alerts.length) return;
+  const today = chicagoDayKey();
+  let sa = S.alertsSeen;
+  if (!sa || sa.day !== today) sa = S.alertsSeen = { day: today, ids: [] };
+  let added = false;
+  for (const a of alerts) {
+    if (sa.ids.includes(a.id)) continue;
+    sa.ids.push(a.id); added = true;
+    showToast(a);
+  }
+  if (added) persist();
+}
+function showToast(a) {
+  const wrap = $("#toasts"); if (!wrap) return;
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = `<span class="toast-ico">⚠</span>
+    <div class="toast-body"><b>${esc(a.header)}</b>${a.description ? `<span>${esc(a.description)}</span>` : ""}</div>
+    <button class="toast-x" aria-label="Dismiss">✕</button>`;
+  wrap.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("in"));
+  let gone = false;
+  const dismiss = () => { if (gone) return; gone = true; el.classList.remove("in"); el.classList.add("out"); setTimeout(() => el.remove(), 400); };
+  el.querySelector(".toast-x").onclick = dismiss;
+  setTimeout(dismiss, 30000); // subtly disappear after 30s
+}
+// A small persistent chip so a missed splash can be re-opened.
+function updateAlertChip(alerts) {
+  const chip = $("#alert-chip"); if (!chip) return;
+  if (!alerts.length) { chip.classList.add("hidden"); chip.onclick = null; return; }
+  chip.classList.remove("hidden");
+  chip.textContent = `⚠ ${alerts.length} service alert${alerts.length > 1 ? "s" : ""}`;
+  chip.onclick = () => alerts.forEach(showToast);
+}
+
+// Downtown-terminal detection, so lists can default to "toward Chicago".
+const DOWNTOWN_RE = /(union station|ogilvie|\botc\b|millennium|van buren|la ?salle|randolph|museum campus)/i;
+function orientDowntownLast(sts) {
+  if (sts.length < 2) return sts;
+  const firstDT = DOWNTOWN_RE.test(sts[0].name), lastDT = DOWNTOWN_RE.test(sts[sts.length - 1].name);
+  return (firstDT && !lastDT) ? [...sts].reverse() : sts;
+}
+
+// ---------- route diagram (vertical strip): readable stop names + live train ----------
+// Replaces the old horizontal journey bar + collapsible stop list. Shows every
+// stop on the trip with its time, the board/arrive ends, and the train's position
+// (live GPS, schedule estimate once en route, or waiting at the origin).
+const ROW_H = 34;
+function routeStrip(data, train, d) {
+  let sts = (data.stations || []).slice();
+  if (!sts.length) return "";
+  const route = activeRoute();
+  const fromId = d === "HW" ? route.home : route.work;
+  const toId = d === "HW" ? route.work : route.home;
+  if (sts[0].id !== fromId) sts.reverse();      // canonical order: origin → destination
+  const n = sts.length;
+
+  // train progress as a fraction along origin→destination
+  let frac = null, mode = null;
+  const pos = data.position && data.position.tripId === train.tripId && data.position.lat != null ? data.position : null;
+  if (pos) {
+    let best = 0, bd = Infinity;
+    sts.forEach((s, i) => { if (s.lat == null) return; const dd = (s.lat - pos.lat) ** 2 + (s.lon - pos.lon) ** 2; if (dd < bd) { bd = dd; best = i; } });
+    frac = best / (n - 1); mode = "live";
+  } else if (Date.now() >= train.depEpochMs && Date.now() < train.arrEpochMs) {
+    frac = Math.min(0.98, (Date.now() - train.depEpochMs) / Math.max(1, train.arrEpochMs - train.depEpochMs)); mode = "est";
+  } else if (Date.now() < train.depEpochMs) {
+    frac = 0; mode = "pre";
+  }
+
+  const served = new Set((train.stops || []).map(s => s.id));
+  const times = {}; for (const s of (train.stops || [])) times[s.id] = s.dep;
+
+  const reversed = !!stripReversed[d];
+  const view = reversed ? [...sts].reverse() : sts;
+  const fracView = frac == null ? null : (reversed ? 1 - frac : frac);
+
+  const rows = view.map(s => {
+    const isFrom = s.id === fromId, isTo = s.id === toId;
+    const on = served.has(s.id) || isFrom || isTo;
+    return `<div class="rs-stop ${on ? "on" : "off"}${isFrom ? " from" : ""}${isTo ? " to" : ""}">
+      <span class="rs-rail"><span class="rs-dot"></span></span>
+      <span class="rs-name">${esc(s.name)}${isFrom ? `<span class="rs-tag">board</span>` : isTo ? `<span class="rs-tag">arrive</span>` : ""}</span>
+      <span class="rs-time">${on ? esc(times[s.id] || "·") : "skips"}</span>
+    </div>`;
+  }).join("");
+
+  let marker = "";
+  if (fracView != null) {
+    const y = fracView * (n - 1) * ROW_H + ROW_H / 2;
+    const lbl = mode === "live" ? "live" : mode === "est" ? "en route" : `departs ${esc(train.dep)}`;
+    marker = `<div class="rs-train ${mode}" style="top:${y.toFixed(0)}px"><span class="rs-train-dot ${mode === "live" ? "pulse" : ""}"></span><span class="rs-train-lbl">${lbl}</span></div>`;
+  }
+
+  return `<div class="rs" data-dir="${d}">
+    <div class="rs-head">
+      <span class="rs-head-title">${esc(view[0].name)} <span class="arrow">→</span> ${esc(view[n - 1].name)}</span>
+      <button class="rs-rev" data-dir="${d}" title="Reverse order">⇅</button>
+    </div>
+    <div class="rs-body">${rows}${marker}</div>
+  </div>`;
 }
 
 // Full-day scheduled timetable for any date (incl. weekends) — no realtime merge.
 async function renderTimetable(dirs, seq = reqSeq) {
-  $("#board-map").classList.add("hidden"); // schedule view has no live map
   const route = activeRoute();
   $("#route-title").innerHTML = dirs.length === 2
     ? `${esc(route.homeName)} <span class="arrow">⇆</span> ${esc(route.workName)}`
@@ -1161,7 +1265,7 @@ function sectionHtml(d) {
 
   return `${head}
     <div class="section-label">${label}</div>
-    <div class="hero${expandedStops[d] ? " expanded" : ""}" data-dir="${d}">
+    <div class="hero" data-dir="${d}">
       <div class="hero-head">
         <div class="hero-left">
           <div class="hero-chips"><span class="chip ${next.class}">${next.class === "E" ? "Express" : "Local"}</span>${statusPill(next)}</div>
@@ -1177,8 +1281,7 @@ function sectionHtml(d) {
             : `<div class="flapboard" data-dep="${next.depEpochMs}" data-sig="${flapSig(fmtFlap(next.depEpochMs))}">${flapCards(next.depEpochMs)}</div>`}
         </div>
       </div>
-      ${next.cancelled ? "" : journeyBar(data, next, d)}
-      ${next.cancelled ? "" : stopsPanel(data, next, d)}
+      ${next.cancelled ? "" : routeStrip(data, next, d)}
     </div>
     ${hint ? `<div class="hint">Express Train ${esc(trainNoShort(hint.trainNo))} leaves at ${hint.dep} (in ${hint.minutes} min). Worth waiting?</div>` : ""}
     <div class="list">
@@ -1209,77 +1312,6 @@ function miniStatus(t) {
   if (t.cancelled || !t.live) return "";
   const s = liveStatus(t);
   return ` <span class="mini-status ${s.cls}"><span class="pdot"></span>${t.delayMin > 0 ? "late" : "on time"}</span>`;
-}
-
-// Journey bar: station ticks; live GPS marker if the positions feed has our train,
-// otherwise time-interpolated progress once en route (marked "estimated").
-function journeyBar(data, train, d) {
-  let sts = data.stations || [];
-  if (sts.length && sts[0].id !== (d === "HW" ? activeRoute().home : activeRoute().work)) sts = [...sts].reverse();
-  const n = sts.length;
-  if (n < 2) return "";
-
-  let frac = null, mode = null;
-  const pos = data.position && data.position.tripId === train.tripId ? data.position : null;
-  if (pos) {
-    let best = 0, bd = Infinity;
-    sts.forEach((s, i) => {
-      if (s.lat == null) return;
-      const dd = (s.lat - pos.lat) ** 2 + (s.lon - pos.lon) ** 2;
-      if (dd < bd) { bd = dd; best = i; }
-    });
-    frac = best / (n - 1); mode = "live";
-  } else if (Date.now() > train.depEpochMs) {
-    frac = Math.min(0.97, (Date.now() - train.depEpochMs) / Math.max(1, train.arrEpochMs - train.depEpochMs));
-    mode = "estimated";
-  }
-
-  const W = 320, pad = 12;
-  const x = i => pad + (W - 2 * pad) * (i / (n - 1));
-  const ticks = sts.slice(1, -1).map((s, i) =>
-    `<circle cx="${x(i + 1).toFixed(1)}" cy="20" r="2.6" fill="var(--line)" opacity="0.55"/>`).join("");
-  const soon = train.depEpochMs - Date.now() < 15 * 60 * 1000 && frac === null;
-  const marker = frac !== null
-    ? `<g transform="translate(${(pad + (W - 2 * pad) * frac).toFixed(1)},20)">
-         <circle r="7" fill="var(--line)" opacity="0.25"${mode === "live" ? ` class="pulse"` : ""}/>
-         <circle r="4" fill="var(--line)"/></g>`
-    : `<circle cx="${pad}" cy="20" r="6" fill="var(--line)" class="${soon ? "pulse" : ""}"/>`;
-
-  return `<div class="journey">
-    <svg viewBox="0 0 ${W} 40" role="img" aria-label="Journey progress">
-      <line x1="${pad}" y1="20" x2="${W - pad}" y2="20" stroke="var(--line)" stroke-width="2.5" opacity="0.5"/>
-      ${frac !== null ? `<line x1="${pad}" y1="20" x2="${(pad + (W - 2 * pad) * frac).toFixed(1)}" y2="20" stroke="var(--line)" stroke-width="2.5"/>` : ""}
-      ${ticks}
-      <rect x="${W - pad - 7}" y="13" width="14" height="14" rx="3.5" fill="var(--line)"/>
-      ${marker}
-    </svg>
-    <div class="lbls"><span>${esc(sts[0].name)}</span><span>${esc(sts[n - 1].name)}</span></div>
-    ${mode === "estimated" ? `<div class="est">position estimated from schedule</div>` : ""}
-  </div>`;
-}
-
-// Expandable list of every station on the journey; the train's actual stops are
-// highlighted with their scheduled time, skipped stations are dimmed.
-function stopsPanel(data, train, d) {
-  let sts = (data.stations || []).slice();
-  if (!sts.length) return "";
-  const fromId = d === "HW" ? activeRoute().home : activeRoute().work;
-  if (sts[0].id !== fromId) sts.reverse(); // order stations in travel direction
-
-  const times = {};
-  for (const s of train.stops || []) times[s.id] = s.dep;
-  const served = new Set((train.stops || []).map(s => s.id));
-
-  const rows = sts.map(s => {
-    const on = served.has(s.id);
-    return `<div class="stop ${on ? "on" : "off"}">
-      <span class="stop-name">${esc(s.name)}</span>
-      <span class="stop-time">${on ? esc(times[s.id] || "•") : "skips"}</span>
-    </div>`;
-  }).join("");
-
-  return `<div class="stops-toggle">All stops <span class="caret">▾</span></div>
-    <div class="stops-panel${expandedStops[d] ? " open" : ""}"><div class="stops-inner">${rows}</div></div>`;
 }
 
 // ---------- contextual feature discovery (one card at a time, never nagging) ----------

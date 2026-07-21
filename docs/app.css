@@ -65,7 +65,35 @@ h1 { padding: 10px 16px 0; font-size: 20px; font-weight: 680; letter-spacing: -0
 h1 .arrow { color: var(--line); }
 
 /* which line this board belongs to — visible on both Live and Schedule */
-#line-pill { padding: 8px 16px 0; }
+.pill-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 16px 0; }
+#line-pill { padding: 0; }
+.alert-chip {
+  display: inline-flex; align-items: center; font: inherit; font-size: 11.5px; font-weight: 700;
+  color: #F2C766; background: #33280F; border: 1px solid #46370F; border-radius: 999px;
+  padding: 4px 11px; cursor: pointer;
+}
+.alert-chip:hover { filter: brightness(1.12); }
+
+/* ---- alert splash toasts (auto-dismiss, once/day) ---- */
+.toasts {
+  position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  z-index: 300; width: min(480px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto; display: flex; gap: 10px; align-items: flex-start;
+  background: #2A230D; color: #F4D488; border: 1px solid #4A3B12; border-radius: 12px;
+  padding: 11px 12px; box-shadow: var(--shadow-md);
+  opacity: 0; transform: translateY(-12px); transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.toast.in { opacity: 1; transform: translateY(0); }
+.toast.out { opacity: 0; transform: translateY(-12px); }
+.toast-ico { flex-shrink: 0; font-size: 15px; line-height: 1.3; }
+.toast-body { flex: 1; min-width: 0; font-size: 13px; }
+.toast-body b { display: block; font-weight: 700; }
+.toast-body span { display: block; color: #D8BE7C; margin-top: 2px; }
+.toast-x { flex-shrink: 0; border: none; background: transparent; color: #C7A85E; font-size: 13px; cursor: pointer; padding: 2px 4px; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: opacity 0.2s ease; } .toast.in, .toast.out { transform: none; } }
 .line-pill {
   display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; font-weight: 600; color: var(--muted);
@@ -104,23 +132,43 @@ h1 .arrow { color: var(--line); }
 .banner { padding: 9px 16px; font-size: 13px; background: #33290F; color: #F2C766; border-bottom: 1px solid #46370F; }
 .banner.offline { background: transparent; color: var(--muted); border-bottom: 1px solid var(--border); }
 
-/* ---- live board: geographic route map with the rider's train ---- */
-.board-map {
-  margin: 12px 16px 0; border-radius: 16px; overflow: hidden;
-  background: #0A0F15; border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+/* ---- route diagram (vertical strip): readable stops + live train ---- */
+.rs { margin: 16px 0 2px; }
+.rs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.rs-head-title { font-size: 12.5px; font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-head-title .arrow { color: var(--line); }
+.rs-rev {
+  flex-shrink: 0; border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  border-radius: 8px; width: 30px; height: 26px; font-size: 14px; cursor: pointer; line-height: 1;
 }
-.board-map .lmap { max-height: 32vh; }
-/* a single-line map: drop the lake + downtown hub, and label only the rider's
-   two stations (all-station labels are too dense at board size) */
-.board-map .lmap-lake, .board-map .lmap-hub, .board-map .lmap-hub-lbl { display: none; }
-.board-map .lmap.focus .lmap-line.on .lmap-lbl { display: none; }
-.board-map .lmap .lmap-lbl.pick { display: block; }
-.board-map-cap {
-  display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  padding: 7px 12px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border);
-}
-.board-map-cap .bm-live { color: var(--green); font-weight: 600; }
-.board-map-cap .bm-sched { color: var(--muted); }
+.rs-rev:hover { border-color: var(--line); color: var(--text); }
+.rs-body { position: relative; max-height: 340px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.rs-stop { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; height: 34px; }
+.rs-rail { position: relative; height: 100%; display: flex; justify-content: center; }
+/* the connecting line runs through the rail column */
+.rs-rail::before { content: ""; position: absolute; top: 0; bottom: 0; width: 3px; background: var(--line); opacity: 0.5; }
+.rs-stop:first-child .rs-rail::before { top: 50%; }
+.rs-stop:last-child .rs-rail::before { bottom: 50%; }
+.rs-dot { position: relative; z-index: 1; width: 9px; height: 9px; border-radius: 50%; align-self: center; background: var(--bg); border: 2px solid var(--line); }
+.rs-stop.off .rs-dot { border-color: var(--muted); width: 7px; height: 7px; }
+.rs-stop.off .rs-rail::before { opacity: 0.25; }
+.rs-name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px; }
+.rs-stop.off .rs-name { color: var(--muted); }
+.rs-stop.from .rs-dot, .rs-stop.to .rs-dot { width: 13px; height: 13px; border-width: 3px; }
+.rs-stop.from .rs-dot { background: var(--line); }
+.rs-stop.to .rs-dot { background: var(--bg); box-shadow: 0 0 0 3px var(--border); }
+.rs-stop.from .rs-name, .rs-stop.to .rs-name { font-weight: 700; }
+.rs-tag { margin-left: 7px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--line-ink); background: var(--line); border-radius: 999px; padding: 1px 7px; }
+.rs-time { font-family: var(--board); font-variant-numeric: tabular-nums; font-size: 12px; color: var(--green); padding-left: 8px; }
+.rs-stop.off .rs-time { color: var(--muted); font-family: inherit; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+/* the train, positioned on the rail between stops */
+.rs-train { position: absolute; left: 0; width: 26px; transform: translateY(-50%); display: flex; align-items: center; pointer-events: none; z-index: 3; }
+.rs-train-dot { width: 15px; height: 15px; border-radius: 50%; margin-left: 5.5px; background: #fff; border: 3px solid var(--line);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.10), 0 1px 4px rgba(0, 0, 0, 0.55); }
+.rs-train-lbl { position: absolute; left: 30px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--line); white-space: nowrap; text-shadow: 0 1px 3px var(--bg), 0 0 3px var(--bg); }
+.rs-train.pre .rs-train-lbl { color: var(--muted); }
 
 /* ---- content ---- */
 main#content { padding: 16px; flex: 1; }
@@ -133,10 +181,9 @@ main#content { padding: 16px; flex: 1; }
 
 .hero {
   background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-  padding: 16px; margin-bottom: 12px; cursor: pointer;
+  padding: 16px; margin-bottom: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
-.hero:hover { border-color: var(--line); }
 
 /* ---- expandable stop list ---- */
 .stops-toggle { font-size: 12px; color: var(--muted); text-align: center; margin-top: 12px; }
@@ -528,6 +575,20 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .wiz-go { margin-left: auto; color: var(--muted); font-size: 18px; line-height: 1; flex-shrink: 0; }
 @media (prefers-reduced-motion: reduce) { .wiz-row:active { transform: none; } }
 
+/* saved routes + section headings inside step 1 */
+.wiz-saved, .wiz-section-label, .wiz-listbar { grid-column: 1 / -1; }
+.wiz-saved { display: flex; flex-direction: column; gap: 8px; }
+.wiz-section-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 6px 2px 0; }
+.wiz-add-label { margin-top: 14px; }
+.wiz-row.saved { border-color: var(--line); }
+.wiz-row.saved .wiz-bar { width: 6px; }
+.wiz-reset { width: 100%; margin-top: 4px; padding: 9px; font-size: 13px; }
+.wiz-reset.confirm { background: #C0392B; border-color: #C0392B; color: #fff; }
+/* station-list bar with the reverse toggle */
+.wiz-listbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 2px 2px; }
+.wiz-rev { border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 8px; padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.wiz-rev:hover { border-color: var(--line); color: var(--text); }
+
 /* the map itself is the primary picker (steps 1-3) */
 .wiz-map { margin: 10px 10px 0; border-radius: 16px; overflow: hidden;
   background: #0A0F15; border: 1px solid #17222E; position: relative; }
@@ -541,12 +602,21 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .lmap-line .lmap-stn { fill: #0A0F15; stroke: var(--c); stroke-width: 1.2; pointer-events: none; }
 .lmap-line .lmap-lbl { display: none; fill: #E9EDF2; font: 700 9.5px "Overpass", sans-serif; paint-order: stroke; stroke: #0A0F15; stroke-width: 3; pointer-events: none; }
 .lmap-line .lmap-term { fill: #7E8A97; font: 700 10px "Overpass", sans-serif; pointer-events: none; }
+/* hover (desktop): trace the route with a flowing dash — a quick preview of the
+   line's journey before you commit. No-op on the Tesla/touch (no hover). */
+.lmap:not(.focus) .lmap-line:hover .lmap-core { stroke-width: 3.6; stroke-dasharray: 16 10; animation: lmapFlow 0.8s linear infinite; }
+.lmap:not(.focus) .lmap-line:hover .lmap-glow { stroke-opacity: 0.42; stroke-width: 9; }
+@keyframes lmapFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -26; } }
+
 .lmap.focus .lmap-line { opacity: 0.1; transition: opacity 0.25s; }
 .lmap.focus .lmap-line.on { opacity: 1; }
 .lmap.focus .lmap-line.on .lmap-core { stroke-width: 3.2; }
 .lmap.focus .lmap-line.on .lmap-glow { stroke-opacity: 0.3; }
 .lmap.focus .lmap-line.on .lmap-stn { r: 3.4; cursor: pointer; pointer-events: auto; }
-.lmap.focus .lmap-line.on .lmap-lbl { display: block; }
+/* Don't cram every name onto the diagonal (unreadable). Only the chosen
+   board/destination stay labeled; hovering a stop reveals its name; the
+   readable list below is the primary picker. */
+.lmap.focus .lmap-line.on .lmap-stn:hover + .lmap-lbl { display: block; }
 .lmap.focus .lmap-line.on .lmap-term { display: none; }
 .lmap-line .lmap-stn.from { fill: var(--c); stroke: #fff; stroke-width: 2; r: 5; }
 .lmap-line .lmap-stn.to { fill: #fff; stroke: var(--c); stroke-width: 2.5; r: 5; }
@@ -556,7 +626,10 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .lmap-train-halo { fill: #2FD53B; opacity: 0.25; animation: lmapPulse 1.6s ease-in-out infinite; }
 .lmap-train { fill: #fff; stroke: #2FD53B; stroke-width: 2.4; }
 @keyframes lmapPulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.07; } }
-@media (prefers-reduced-motion: reduce) { .lmap-train-halo { animation: none; } .lmap.focus .lmap-line { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .lmap-train-halo, .lmap:not(.focus) .lmap-line:hover .lmap-core { animation: none; }
+  .lmap.focus .lmap-line { transition: none; }
+}
 
 /* wizard step 4: feature explainers */
 .feat {
