@@ -118,27 +118,6 @@ async function route(request, env, ctx) {
         }
         case "/api/next":
           return handleNext(url, env, waitUntil);
-        case "/api/debug": {
-          // TEMPORARY read-only diagnostic: is the realtime feed empty, or do its
-          // trip IDs not match the static schedule? (Returns only trip-id strings.)
-          const route = url.searchParams.get("route") || "BNSF";
-          const [tu, pos] = await Promise.all([
-            fetchFeed(env, "tripupdates", waitUntil),
-            fetchFeed(env, "positions", waitUntil),
-          ]);
-          const tuTrips = (tu.entity || []).filter(e => e.tripUpdate).map(e => e.tripUpdate.trip && e.tripUpdate.trip.tripId).filter(Boolean);
-          const posTrips = (pos.entity || []).filter(e => e.vehicle).map(e => e.vehicle.trip && e.vehicle.trip.tripId).filter(Boolean);
-          const sched = await kv(env, `sched:${route}`);
-          const schedIds = sched.trips.map(t => t.id);
-          const schedSet = new Set(schedIds);
-          return json(env, {
-            route,
-            tripupdates: { entities: (tu.entity || []).length, withTripId: tuTrips.length, sample: tuTrips.slice(0, 10) },
-            positions: { entities: (pos.entity || []).length, withTripId: posTrips.length, sample: posTrips.slice(0, 10) },
-            sched: { count: schedIds.length, sample: schedIds.slice(0, 10) },
-            matches: { tripupdatesInSched: tuTrips.filter(id => schedSet.has(id)).length, positionsInSched: posTrips.filter(id => schedSet.has(id)).length },
-          }, 200, 10);
-        }
         default:
           return json(env, { error: "not found" }, 404);
       }

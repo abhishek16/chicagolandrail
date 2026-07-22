@@ -1194,6 +1194,7 @@ function sectionHtml(d) {
             <span class="to">→ ${next.arr}</span>
           </div>
           <div class="hero-meta">Train ${esc(trainNoShort(next.trainNo))}${next.cancelled ? "" : `<span class="wx" data-wx="${d}"></span>`}</div>
+          ${next.cancelled ? "" : liveLocation(data, next)}
         </div>
         <div class="hero-countdown">
           ${next.cancelled
@@ -1219,6 +1220,22 @@ function sectionHtml(d) {
         </div>`;
       }).join("")}
     </div>`;
+}
+
+// Live location line in the hero: shown when Metra's positions feed is actively
+// tracking this train (only running/imminent trains — future departures show the
+// countdown instead). Surfaces "where's my train" without opening the diagram.
+function liveLocation(data, train) {
+  const p = data.position && data.position.tripId === train.tripId && data.position.lat != null ? data.position : null;
+  if (!p) return "";
+  const sts = (data.stations || []).filter(s => s.lat != null);
+  let near = "";
+  if (sts.length) {
+    let best = sts[0], bd = Infinity;
+    for (const s of sts) { const dd = (s.lat - p.lat) ** 2 + (s.lon - p.lon) ** 2; if (dd < bd) { bd = dd; best = s; } }
+    near = ` · near ${esc(best.name)}`;
+  }
+  return `<div class="live-loc"><span class="live-pip"></span>Live now${near}</div>`;
 }
 
 // Realtime status for a train: what the feed says vs the schedule.
