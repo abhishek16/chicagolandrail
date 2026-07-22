@@ -189,6 +189,57 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     }
   }
 
+  // ---- interactive camera ----
+  // On focus the line is fit to the view; the rider can then pinch / scroll / drag
+  // to zoom into any stretch. The label cull re-runs (throttled) on every change,
+  // so zooming into the crowded downtown reveals all of its station names.
+  let focusedId = null;
+  const view = { s: 1, tx: 0, ty: 0, fitS: 1 };
+  let cullPending = false;
+  const raf = typeof requestAnimationFrame !== "undefined" ? requestAnimationFrame : f => setTimeout(f, 16);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  function applyView(animate) {
+    cam.style.transition = animate ? "" : "none";
+    cam.style.transform = `translate(${r1(view.tx)}px, ${r1(view.ty)}px) scale(${view.s.toFixed(4)})`;
+    svg.style.setProperty("--inv", (1 / view.s).toFixed(4)); // labels stay a constant size
+    if (cullPending) return;
+    cullPending = true;
+    raf(() => { cullPending = false; if (focusedId) cullLabels(focusedId, view.s, view.tx, view.ty); });
+  }
+  function fitView(lineId) {
+    const b = ctrl.boundsOf(lineId); if (!b) return;
+    const pad = 0.16, bw = Math.max(b.maxX - b.minX, 1), bh = Math.max(b.maxY - b.minY, 1);
+    const s = Math.max(1.15, Math.min(Math.min((W * (1 - 2 * pad)) / bw, (H * (1 - 2 * pad)) / bh), 5));
+    const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+    view.fitS = s; view.s = s; view.tx = W / 2 - cx * s; view.ty = H / 2 - cy * s;
+    svg.classList.add("zoomed");
+    applyView(true);
+  }
+  function clampView() {
+    const b = ctrl.boundsOf(focusedId); if (!b) return;
+    const m = W * 0.35;
+    const txA = -b.maxX * view.s + m, txB = W - b.minX * view.s - m;
+    view.tx = clamp(view.tx, Math.min(txA, txB), Math.max(txA, txB));
+    const tyA = -b.maxY * view.s + m, tyB = H - b.minY * view.s - m;
+    view.ty = clamp(view.ty, Math.min(tyA, tyB), Math.max(tyA, tyB));
+  }
+  function zoomAt(factor, cx, cy) {
+    const ns = clamp(view.s * factor, view.fitS * 0.95, view.fitS * 14);
+    const wx = (cx - view.tx) / view.s, wy = (cy - view.ty) / view.s;
+    view.s = ns; view.tx = cx - wx * ns; view.ty = cy - wy * ns;
+    clampView(); applyView(false);
+  }
+  function panBy(dx, dy) { view.tx += dx; view.ty += dy; clampView(); applyView(false); }
+  function clientToVB(clientX, clientY) {
+    try {
+      const p = svg.createSVGPoint(); p.x = clientX; p.y = clientY;
+      const m = svg.getScreenCTM(); if (m) { const q = p.matrixTransform(m.inverse()); return [q.x, q.y]; }
+    } catch { /* no layout (tests) */ }
+    const rr = svg.getBoundingClientRect();
+    return rr.width ? [(clientX - rr.left) / rr.width * W, (clientY - rr.top) / rr.height * H] : [W / 2, H / 2];
+  }
+
   // ---- controller ----
   const ctrl = {
     element: svg,
@@ -209,12 +260,14 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     },
     focus(lineId) {
       svg.classList.add("focus");
+      host.classList.add("lmap-focused");
       for (const id in groups) groups[id].g.classList.toggle("on", id === lineId);
       raiseLine(lineId);
       ctrl.zoomTo(lineId); // the one place the camera glides: after you pick a line
     },
     unfocus() {
       svg.classList.remove("focus");
+      host.classList.remove("lmap-focused");
       for (const id in groups) groups[id].g.classList.remove("on", "hovering");
       ctrl.resetZoom();
       ctrl.select(null);
@@ -224,26 +277,17 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
       for (const id in groups) groups[id].g.classList.toggle("hovering", id === lineId);
       if (lineId) raiseLine(lineId);
     },
-    zoomTo(lineId) {
-      const b = ctrl.boundsOf(lineId);
-      if (!b) return;
-      const pad = 0.16;
-      const bw = Math.max(b.maxX - b.minX, 1), bh = Math.max(b.maxY - b.minY, 1);
-      let s = Math.min((W * (1 - 2 * pad)) / bw, (H * (1 - 2 * pad)) / bh);
-      s = Math.max(1.15, Math.min(s, 5));
-      const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
-      const tx = W / 2 - cx * s, ty = H / 2 - cy * s;
-      cam.style.transform = `translate(${r1(tx)}px, ${r1(ty)}px) scale(${s.toFixed(3)})`;
-      svg.style.setProperty("--inv", (1 / s).toFixed(3)); // counter-scale labels to keep them ~constant size
-      svg.classList.add("zoomed");
-      cullLabels(lineId, s, tx, ty);
-    },
+    zoomTo(lineId) { focusedId = lineId; fitView(lineId); },
     resetZoom() {
+      focusedId = null;
       svg.querySelectorAll(".lmap-lbl.culled").forEach(n => n.classList.remove("culled"));
-      cam.style.transform = "";
+      view.s = 1; view.tx = 0; view.ty = 0; view.fitS = 1;
+      cam.style.transition = ""; cam.style.transform = "";
       svg.style.setProperty("--inv", "1");
       svg.classList.remove("zoomed");
     },
+    // exposed for the +/− controls and tests
+    zoomAt, panBy, fitView, get view() { return view; },
     // mark board / destination stations on the focused line
     select(lineId, sel = {}) {
       svg.querySelectorAll(".lmap-stn.from,.lmap-stn.to").forEach(n => n.classList.remove("from", "to"));
@@ -274,5 +318,60 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
       return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys), W, H };
     },
   };
+
+  // ---- gestures (active only while a line is focused for station picking) ----
+  const focused = () => svg.classList.contains("focus");
+  svg.addEventListener("wheel", e => {
+    if (!focused()) return;
+    e.preventDefault();
+    const [cx, cy] = clientToVB(e.clientX, e.clientY);
+    zoomAt(e.deltaY < 0 ? 1.18 : 1 / 1.18, cx, cy);
+  }, { passive: false });
+
+  let pinchD = 0, panPt = null;
+  const tdist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  svg.addEventListener("touchstart", e => {
+    if (!focused()) return;
+    if (e.touches.length === 2) { pinchD = tdist(e.touches); panPt = null; }
+    else if (e.touches.length === 1) panPt = clientToVB(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  svg.addEventListener("touchmove", e => {
+    if (!focused()) return;
+    if (e.touches.length === 2 && pinchD) {
+      e.preventDefault();
+      const d = tdist(e.touches);
+      const [cx, cy] = clientToVB((e.touches[0].clientX + e.touches[1].clientX) / 2, (e.touches[0].clientY + e.touches[1].clientY) / 2);
+      zoomAt(d / pinchD, cx, cy); pinchD = d;
+    } else if (e.touches.length === 1 && panPt) {
+      const [cx, cy] = clientToVB(e.touches[0].clientX, e.touches[0].clientY);
+      const dx = cx - panPt[0], dy = cy - panPt[1];
+      if (Math.abs(dx) + Math.abs(dy) > 2) { e.preventDefault(); panBy(dx, dy); panPt = [cx, cy]; } // move = drag, not a tap
+    }
+  }, { passive: false });
+  svg.addEventListener("touchend", () => { pinchD = 0; panPt = null; });
+
+  // desktop drag-to-pan
+  let mPt = null;
+  svg.addEventListener("mousedown", e => { if (focused()) mPt = clientToVB(e.clientX, e.clientY); });
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("mousemove", e => { if (!mPt) return; const [cx, cy] = clientToVB(e.clientX, e.clientY); panBy(cx - mPt[0], cy - mPt[1]); mPt = [cx, cy]; });
+    window.addEventListener("mouseup", () => { mPt = null; });
+  }
+
+  // ---- zoom controls + a one-line hint (shown only while focused) ----
+  const ctrls = document.createElement("div");
+  ctrls.className = "lmap-ctrls";
+  ctrls.innerHTML = `<button type="button" class="lz-in" aria-label="Zoom in">+</button>
+    <button type="button" class="lz-out" aria-label="Zoom out">−</button>
+    <button type="button" class="lz-fit" aria-label="Fit the whole line">⤢</button>`;
+  ctrls.querySelector(".lz-in").addEventListener("click", () => zoomAt(1.5, W / 2, H / 2));
+  ctrls.querySelector(".lz-out").addEventListener("click", () => zoomAt(1 / 1.5, W / 2, H / 2));
+  ctrls.querySelector(".lz-fit").addEventListener("click", () => focusedId && fitView(focusedId));
+  host.appendChild(ctrls);
+  const hint = document.createElement("div");
+  hint.className = "lmap-hint";
+  hint.textContent = "Pinch, scroll, or tap + to zoom in for every stop";
+  host.appendChild(hint);
+
   return ctrl;
 }

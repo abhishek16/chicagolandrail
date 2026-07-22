@@ -640,6 +640,24 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .lmap-train-halo { fill: #2FD53B; opacity: 0.25; animation: lmapPulse 1.6s ease-in-out infinite; }
 .lmap-train { fill: #fff; stroke: #2FD53B; stroke-width: 2.4; }
 @keyframes lmapPulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.07; } }
+
+/* interactive zoom while a line is focused: gestures zoom the map, not the page */
+.lmap.focus { touch-action: none; cursor: grab; }
+.lmap.focus:active { cursor: grabbing; }
+.lmap-ctrls { display: none; position: absolute; right: 10px; bottom: 10px; z-index: 5; flex-direction: column; gap: 6px; }
+.lmap-focused .lmap-ctrls { display: flex; }
+.lmap-ctrls button {
+  width: 36px; height: 36px; border-radius: 9px; border: 1px solid #24303F;
+  background: rgba(14, 21, 30, 0.82); backdrop-filter: blur(6px); color: #E9EDF2;
+  font-size: 19px; font-weight: 700; line-height: 1; cursor: pointer;
+}
+.lmap-ctrls button:hover { border-color: var(--line); color: #fff; }
+.lmap-ctrls button:active { transform: scale(0.94); }
+.lmap-hint {
+  display: none; position: absolute; left: 10px; bottom: 12px; z-index: 5; pointer-events: none;
+  font-size: 11px; color: #AEBAC7; background: rgba(10, 15, 21, 0.7); padding: 4px 10px; border-radius: 999px;
+}
+.lmap-focused .lmap-hint { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .lmap-train-halo, .lmap-line.hovering .lmap-core { animation: none; }
   .lmap.focus .lmap-line, .lmap-cam { transition: none; }
