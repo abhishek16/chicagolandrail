@@ -147,7 +147,10 @@ async function buildReminderMsg(env, cache, tuIndex, now, rem) {
       return { title: `Train ${rem.trainNo} cancelled`, body: `Your ${rem.depLabel} ${rem.fromName} → ${rem.toName} is cancelled.`, tag: `rem:${rem.id}:${now.dateStr}`, url: "./" };
     }
     if (rec) {
-      const d = delayAt(rec, rem.from);
+      // scheduled dep as an epoch (now + seconds-of-day offset) so delayAt can use
+      // Metra's absolute predicted time when there's no explicit `delay` field.
+      const schedDep = Math.round(Date.now() / 1000) + (rem.depSec - now.nowSec);
+      const d = delayAt(rec, rem.from, schedDep);
       const min = d != null ? Math.round(d / 60) : 0;
       statusLine = min > 0 ? ` Running ${min} min late.` : " On time.";
     }
@@ -182,7 +185,7 @@ async function buildBriefingMsg(env, cache, tuIndex, alertFeed, now, br) {
   let statusNote = "";
   const rec = tuIndex.get(best.trip.id);
   if (rec && rec.cancelled) statusNote = " (cancelled)";
-  else if (rec) { const d = delayAt(rec, br.from); const min = d != null ? Math.round(d / 60) : 0; statusNote = min > 0 ? ` (+${min} min)` : " (on time)"; }
+  else if (rec) { const schedDep = Math.round(Date.now() / 1000) + (best.dep - now.nowSec); const d = delayAt(rec, br.from, schedDep); const min = d != null ? Math.round(d / 60) : 0; statusNote = min > 0 ? ` (+${min} min)` : " (on time)"; }
 
   return {
     title: `Good morning — next ${br.line}`,

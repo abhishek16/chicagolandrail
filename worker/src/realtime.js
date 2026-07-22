@@ -53,14 +53,21 @@ export function indexTripUpdates(feed) {
   return byTrip;
 }
 
-// Delay in seconds at a given stop for a trip update record. Falls back to the
-// closest preceding stop-time-update, then the trip-level delay.
-export function delayAt(rec, stopId) {
+// Delay in seconds at a given stop for a trip update record. Prefers an explicit
+// GTFS-realtime `delay`, but Metra usually sends only an absolute predicted `time`
+// (no `delay` field), so we derive the delay from (predicted − scheduled) when the
+// scheduled dep/arr seconds are supplied. Falls back to the closest stop-time-update
+// with an explicit delay, then the trip-level delay.
+export function delayAt(rec, stopId, schedDepSec = null, schedArrSec = null) {
   if (!rec) return null;
   let best = null;
   for (const s of rec.stus) {
     if (s.stopId === stopId) {
-      return s.depDelay ?? s.arrDelay ?? rec.tripDelay ?? null;
+      if (s.depDelay != null) return s.depDelay;
+      if (s.arrDelay != null) return s.arrDelay;
+      if (s.depTime != null && schedDepSec != null) return s.depTime - schedDepSec;
+      if (s.arrTime != null && schedArrSec != null) return s.arrTime - schedArrSec;
+      return rec.tripDelay ?? null;
     }
     if (s.depDelay != null || s.arrDelay != null) best = s.depDelay ?? s.arrDelay;
   }

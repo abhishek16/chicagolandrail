@@ -174,7 +174,9 @@ async function handleNext(url, env, waitUntil) {
 
   let merged = trains.map(t => {
     const rec = tuIndex ? tuIndex.get(t.tripId) : null;
-    const delaySec = rec ? delayAt(rec, from) : null;
+    // Pass the scheduled dep/arr seconds so delayAt can derive the delay from an
+    // absolute predicted time when Metra omits the explicit `delay` field.
+    const delaySec = rec ? delayAt(rec, from, Math.round(t.depEpochMs / 1000), Math.round(t.arrEpochMs / 1000)) : null;
     const delayMin = delaySec != null ? Math.round(delaySec / 60) : 0;
     const shift = (delaySec || 0) * 1000;
     return {
