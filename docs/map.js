@@ -41,7 +41,7 @@ const SHORE = [
   [41.60, -87.25], [41.55, -86.90],
 ];
 
-export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
+export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover }) {
   const geo = {};
   for (const l of lines) geo[l.id] = (stopsByLine[l.id] || []).filter(s => s.lat != null && s.lon != null);
   const all = Object.values(geo).flat();
@@ -123,8 +123,10 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation }) {
     // Desktop hover just HIGHLIGHTS the line — it never moves the camera. (Zooming
     // on hover pans the map under a stationary cursor, which lands the cursor on a
     // different line and re-triggers → the jumping. The glide happens on tap/focus.)
-    hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) ctrl.hover(l.id); });
-    hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) ctrl.hover(null); });
+    // hover also tells the app which line it is, so it can highlight the matching
+    // card in the list below (a clear two-way link between map and picker).
+    hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) { ctrl.hover(l.id); onHover && onHover(l.id); } });
+    hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) { ctrl.hover(null); onHover && onHover(null); } });
     cam.appendChild(g);
     groups[l.id] = { g, stnEls };
   }

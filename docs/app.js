@@ -412,7 +412,7 @@ async function buildWizMap() {
   try {
     const { stopsByLine } = await ensureMapGeo();
     if (!wiz) return; // wizard was closed while geometry loaded
-    wizMap = createMap(host, { lines, stopsByLine, onLine: onMapLine, onStation: onMapStation });
+    wizMap = createMap(host, { lines, stopsByLine, onLine: onMapLine, onStation: onMapStation, onHover: onMapHover });
     host.classList.remove("loading");
     applyMapState();
   } catch {
@@ -433,8 +433,24 @@ function applyMapState() {
   }
 }
 
-function onMapLine(id) { if (wiz && wiz.step === 1) pickWizLine(id); }
+function onMapLine(id) { if (wiz && wiz.step === 1) { highlightWizLine(id, true); pickWizLine(id); } }
 function onMapStation(lineId, sid) { if (wiz && (wiz.step === 2 || wiz.step === 3)) pickWizStation(sid); }
+function onMapHover(id) { if (wiz && wiz.step === 1) highlightWizLine(id); }
+
+// Highlight the line card matching a map hover/tap — the visible link between the
+// map above and the list below. `scroll` nudges it into view when tapped.
+function highlightWizLine(id, scroll = false) {
+  const list = $("#wiz-list");
+  if (!list) return;
+  list.querySelectorAll(".wiz-row.hl").forEach(r => { r.classList.remove("hl"); r.style.borderColor = ""; r.style.boxShadow = ""; });
+  if (!id) return;
+  const row = [...list.querySelectorAll(".wiz-row:not(.saved)")].find(r => r.dataset.id === id);
+  if (!row) return;
+  const l = lines.find(x => x.id === id);
+  row.classList.add("hl");
+  if (l) { row.style.borderColor = l.color; row.style.boxShadow = `0 0 0 1px ${l.color}`; }
+  if (scroll) row.scrollIntoView({ block: "nearest" });
+}
 
 function wizBack() {
   if (wiz.step === 3) { wiz.from = null; wiz.step = 2; return renderWizard(); }
@@ -860,7 +876,7 @@ async function refresh() {
   for (const d of dirs) {
     const [from, to] = d === "HW" ? [route.home, route.work] : [route.work, route.home];
     try {
-      const data = await api(`/api/next?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&count=3`);
+      const data = await api(`/api/next?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&count=4`);
       if (seq !== reqSeq) return; // newer request started — this is a stale response, drop it
       data.fetchedAt = Date.now();
       lastData[d] = data;

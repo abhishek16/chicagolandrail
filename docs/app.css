@@ -143,6 +143,7 @@ h1 .arrow { color: var(--line); }
 }
 .stops-toggle:hover { color: var(--text); }
 .stops-toggle .caret, .trip-row .caret { display: inline-block; transition: transform 0.2s; font-size: 11px; }
+.trip-row .caret { color: var(--muted); font-size: 10px; line-height: 1; }
 .stops-wrap.open .stops-toggle .caret, .trip.open .trip-row .caret { transform: rotate(180deg); }
 .stops-collapse { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
 .stops-wrap.open .stops-collapse, .trip.open .stops-collapse { max-height: 1400px; }
@@ -188,7 +189,7 @@ h1 .arrow { color: var(--line); }
 .trip { border-bottom: 1px solid var(--border); }
 .trip-row { width: 100%; text-align: left; background: transparent; border: none; cursor: pointer; }
 .trip-row.row { border-bottom: none; }
-.trip-row .right { justify-content: flex-end; }
+.trip-row .right { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .trip.open { background: rgba(255, 255, 255, 0.02); }
 .trip .stops-collapse { padding: 0 4px 10px; }
 
@@ -566,6 +567,8 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
   transition: border-color 0.15s, transform 0.1s;
 }
 .wiz-row:hover { border-color: var(--line); }
+/* .hl = highlighted from a map hover/tap (border/shadow colored inline to the line) */
+.wiz-row.hl { background: rgba(255, 255, 255, 0.03); transform: translateY(-1px); }
 .wiz-row:active { transform: scale(0.985); }
 .wiz-bar { width: 6px; align-self: stretch; border-radius: 3px; flex-shrink: 0; }
 .wiz-txt { display: flex; flex-direction: column; min-width: 0; }
