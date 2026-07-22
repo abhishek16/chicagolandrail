@@ -520,7 +520,7 @@ function renderWizardList() {
             <span class="wiz-go" aria-hidden="true">›</span>
           </button>`;
         }).join("")}
-        <button class="ghost danger wiz-reset" id="wiz-reset">Erase everything &amp; start fresh</button>
+        <button class="ghost danger wiz-reset" id="wiz-reset">Reset &amp; Start Over</button>
       </div>
       <div class="wiz-section-label wiz-add-label">${S.routes.length >= 5 ? "Route limit reached (5)" : "Add another line"}</div>` : "";
     const lineCards = S.routes.length >= 5 ? "" : lines.map(l => `
@@ -534,8 +534,14 @@ function renderWizardList() {
       oneOff = null; S.activeRouteId = b.dataset.rid; persist(); wiz = null; showMain();
     });
     const rb = $("#wiz-reset");
-    if (rb) twoTap(rb, "Tap again to erase everything", () => resetApp());
-    list.querySelectorAll(".wiz-row:not(.saved)").forEach(b => b.onclick = () => pickWizLine(b.dataset.id));
+    if (rb) twoTap(rb, "Tap again to reset", () => resetApp());
+    // Two-way link: hovering a line card lights up its line on the map above,
+    // mirroring how hovering the map highlights the card.
+    list.querySelectorAll(".wiz-row:not(.saved)").forEach(b => {
+      b.onclick = () => pickWizLine(b.dataset.id);
+      b.onmouseenter = () => { if (wizMap) wizMap.hover(b.dataset.id); highlightWizLine(b.dataset.id); };
+      b.onmouseleave = () => { if (wizMap) wizMap.hover(null); highlightWizLine(null); };
+    });
     return;
   }
   if (wiz.loading) { list.innerHTML = `<div class="muted center">Loading stations…</div>`; return; }

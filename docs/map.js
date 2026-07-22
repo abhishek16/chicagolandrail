@@ -67,6 +67,15 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
   const d2hub = st => { const [x, y] = pt(st); return (x - hx) ** 2 + (y - hy) ** 2; };
 
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, class: "lmap", role: "img", "aria-label": "Metra system map" });
+  // A subtle deep-water gradient so the whole of Lake Michigan reads as water
+  // (not just a hairline near the shore), while staying dark enough for the lines.
+  const defs = el("defs");
+  const grad = el("linearGradient", { id: "lmap-lake-grad", x1: "0", y1: "0", x2: "1", y2: "1" });
+  grad.appendChild(el("stop", { offset: "0", "stop-color": "#123453" }));
+  grad.appendChild(el("stop", { offset: "0.55", "stop-color": "#0E2740" }));
+  grad.appendChild(el("stop", { offset: "1", "stop-color": "#0B1D30" }));
+  defs.appendChild(grad);
+  svg.appendChild(defs);
   // Everything lives inside a camera group we can pan/scale (CSS-transitioned) to
   // zoom into a hovered/focused line so its station names become readable.
   const cam = el("g", { class: "lmap-cam" });
@@ -79,6 +88,7 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
 
   // ---- one <g> per line ----
   const groups = {};
+  let hoveredId = null; // last line the pointer was over (for tolerant tap-to-select)
   for (const l of lines) {
     const sts = geo[l.id];
     if (sts.length < 2) continue;
@@ -119,14 +129,16 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
     g.appendChild(term);
 
     const hit = g.querySelector(".lmap-hit");
-    hit.addEventListener("click", e => { e.stopPropagation(); onLine && onLine(l.id); });
+    // Selection is handled by a tolerant SVG-level click (see below), NOT a per-line
+    // click — a thin diagonal hit path is easy to miss on a tap, so resolving the
+    // line from the click target OR the last-hovered line makes selection land.
     // Desktop hover just HIGHLIGHTS the line — it never moves the camera. (Zooming
     // on hover pans the map under a stationary cursor, which lands the cursor on a
     // different line and re-triggers → the jumping. The glide happens on tap/focus.)
     // hover also tells the app which line it is, so it can highlight the matching
     // card in the list below (a clear two-way link between map and picker).
-    hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) { ctrl.hover(l.id); onHover && onHover(l.id); } });
-    hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) { ctrl.hover(null); onHover && onHover(null); } });
+    hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) { hoveredId = l.id; ctrl.hover(l.id); onHover && onHover(l.id); } });
+    hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) { hoveredId = null; ctrl.hover(null); onHover && onHover(null); } });
     cam.appendChild(g);
     groups[l.id] = { g, stnEls };
   }
@@ -155,10 +167,17 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
   else if (typeof window !== "undefined" && window.addEventListener) window.addEventListener("resize", measure);
   if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(measure); else measure();
 
-  // Tapping empty water releases focus — but only where that makes sense (a future
-  // "explore" view). Off during onboarding, where Back drives the step/focus, so a
-  // stray water tap can't desync the map from the wizard's current question.
-  svg.addEventListener("click", () => { if (ctrl.releaseOnWater) ctrl.unfocus(); });
+  // Click handling. On the focused view a stray water tap releases focus only where
+  // that makes sense (off during onboarding, so it can't desync from the wizard).
+  // On the SYSTEM view, a click selects a line — resolved from the click target's
+  // group, falling back to the last-hovered line, so taps just off the thin hit
+  // path still land (fixes "clicking the line does nothing").
+  svg.addEventListener("click", e => {
+    if (svg.classList.contains("focus")) { if (ctrl.releaseOnWater) ctrl.unfocus(); return; }
+    const grp = e.target && e.target.closest ? e.target.closest(".lmap-line") : null;
+    const id = (grp && grp.getAttribute("data-id")) || hoveredId;
+    if (id) onLine && onLine(id);
+  });
 
   // Bring a line (and the train/hub layers) to the top of the camera so it draws
   // above the dimmed system.
