@@ -67,24 +67,20 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
   const d2hub = st => { const [x, y] = pt(st); return (x - hx) ** 2 + (y - hy) ** 2; };
 
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, class: "lmap", role: "img", "aria-label": "Metra system map" });
-  // A subtle deep-water gradient so the whole of Lake Michigan reads as water
-  // (not just a hairline near the shore), while staying dark enough for the lines.
-  const defs = el("defs");
-  const grad = el("linearGradient", { id: "lmap-lake-grad", x1: "0", y1: "0", x2: "1", y2: "1" });
-  grad.appendChild(el("stop", { offset: "0", "stop-color": "#123453" }));
-  grad.appendChild(el("stop", { offset: "0.55", "stop-color": "#0E2740" }));
-  grad.appendChild(el("stop", { offset: "1", "stop-color": "#0B1D30" }));
-  defs.appendChild(grad);
-  svg.appendChild(defs);
   // Everything lives inside a camera group we can pan/scale (CSS-transitioned) to
   // zoom into a hovered/focused line so its station names become readable.
   const cam = el("g", { class: "lmap-cam" });
   svg.appendChild(cam);
 
   // ---- water ----
+  // A uniform subtle-blue fill (no bounding-box gradient — that faded to near-bg
+  // toward the east and looked half-empty when zoomed). The polygon runs far past
+  // the frame in every direction so the whole area east of the shoreline stays
+  // water at any zoom/pan; a non-scaling stroke keeps the coastline crisp.
+  const FAR = 6000;
   const lake = "M " + SHORE.map(([la, lo]) => `${r1(px(lo))},${r1(py(la))}`).join(" L ")
-    + ` L ${W + 60},${r1(py(41.55))} L ${W + 60},-60 L ${r1(px(-87.79))},-60 Z`;
-  cam.appendChild(el("path", { class: "lmap-lake", d: lake }));
+    + ` L ${W + FAR},${H + FAR} L ${W + FAR},${-FAR} L ${r1(px(-87.79))},${-FAR} Z`;
+  cam.appendChild(el("path", { class: "lmap-lake", d: lake, "vector-effect": "non-scaling-stroke" }));
 
   // ---- one <g> per line ----
   const groups = {};
