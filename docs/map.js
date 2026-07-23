@@ -132,12 +132,14 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
     // card in the list below (a clear two-way link between map and picker).
     hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) { hoveredId = l.id; ctrl.hover(l.id); onHover && onHover(l.id); } });
     hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) { hoveredId = null; ctrl.hover(null); onHover && onHover(null); } });
-    // SELECT on a direct tap of the hit path. This is the SAME element that reliably
-    // receives the hover above, and it uses the closure's l.id — so selection never
-    // depends on event bubbling up to the svg, on Element.closest(), or on hoveredId
-    // (any of which can silently fail to resolve a line in some browsers, which is why
-    // "tapping a line did nothing" while hover worked). pointerup covers touch too.
+    // SELECT on a direct tap of the hit path — the SAME element that reliably receives
+    // the hover above — using the closure's l.id (never depends on bubbling to the svg,
+    // Element.closest(), or hoveredId). Bind BOTH pointerup and click: a click is
+    // canceled by the browser if the DOM under the pointer changes between down and up,
+    // but pointerup still lands; whichever fires first flips the map to focus, and the
+    // focus guard makes the other a no-op, so we never double-select.
     const pick = e => { if (!svg.classList.contains("focus")) { e.stopPropagation(); onLine && onLine(l.id); } };
+    hit.addEventListener("pointerup", pick);
     hit.addEventListener("click", pick);
     cam.appendChild(g);
     groups[l.id] = { g, stnEls };
@@ -293,10 +295,12 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
       ctrl.resetZoom();
       ctrl.select(null);
     },
-    // hover = highlight only. Brighten + raise the line; NEVER move the camera.
+    // hover = highlight ONLY. No raiseLine here: re-appending the hovered group churns
+    // the DOM under the cursor, and some browsers respond by canceling the click that
+    // follows — the "hover works but the tap does nothing" bug. The picked line
+    // z-raises on focus() instead, which is a deliberate tap, not a passing hover.
     hover(lineId) {
       for (const id in groups) groups[id].g.classList.toggle("hovering", id === lineId);
-      if (lineId) raiseLine(lineId);
     },
     zoomTo(lineId) { focusedId = lineId; fitView(lineId); },
     resetZoom() {
