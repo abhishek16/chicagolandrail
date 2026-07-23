@@ -3,11 +3,71 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chicagoland Rail</title>
-  <meta name="description" content="Your next Chicagoland commuter train, with live delays and service alerts.">
+  <title>Live Metra Train Times, Delays &amp; Alerts | Chicagoland Rail</title>
+  <meta name="description" content="Free, fast tracker for Chicago's Metra commuter trains — your next train with live delays, cancellations, and line service alerts across all 11 Metra lines. Installable, works offline.">
+  <link rel="canonical" href="https://chicagolandrail.pages.dev/">
+  <meta name="robots" content="index, follow, max-image-preview:large">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" id="favicon" href="icons/icon32.png">
+  <link rel="apple-touch-icon" href="icons/icon192.png">
   <meta name="theme-color" content="#0A0F15">
+  <meta name="application-name" content="Chicagoland Rail">
+  <meta name="apple-mobile-web-app-title" content="Chicagoland Rail">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="geo.region" content="US-IL">
+  <meta name="geo.placename" content="Chicago">
+
+  <!-- Open Graph / social sharing -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Chicagoland Rail">
+  <meta property="og:title" content="Live Metra Train Times, Delays &amp; Alerts | Chicagoland Rail">
+  <meta property="og:description" content="Your next Metra train with live delays, cancellations, and service alerts. Free, fast, installable — all 11 Chicagoland commuter-rail lines.">
+  <meta property="og:url" content="https://chicagolandrail.pages.dev/">
+  <meta property="og:image" content="https://chicagolandrail.pages.dev/icons/icon512.png">
+  <meta property="og:locale" content="en_US">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Live Metra Train Times, Delays &amp; Alerts | Chicagoland Rail">
+  <meta name="twitter:description" content="Your next Metra train with live delays, cancellations, and service alerts. Free &amp; installable.">
+  <meta name="twitter:image" content="https://chicagolandrail.pages.dev/icons/icon512.png">
+
+  <!-- Structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://chicagolandrail.pages.dev/#website",
+        "name": "Chicagoland Rail",
+        "url": "https://chicagolandrail.pages.dev/",
+        "inLanguage": "en-US",
+        "description": "Free tracker for Chicago's Metra commuter trains: your next train, live delays, cancellations, and service alerts."
+      },
+      {
+        "@type": "WebApplication",
+        "name": "Chicagoland Rail",
+        "alternateName": "Chicagoland Rail Metra train tracker",
+        "url": "https://chicagolandrail.pages.dev/",
+        "applicationCategory": "TravelApplication",
+        "operatingSystem": "Any (web browser, installable PWA)",
+        "browserRequirements": "Requires JavaScript.",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "inLanguage": "en-US",
+        "description": "See your next Metra train with live delays, cancellations, and line-specific service alerts across all 11 Chicagoland commuter-rail lines.",
+        "areaServed": { "@type": "City", "name": "Chicago", "address": { "@type": "PostalAddress", "addressRegion": "IL", "addressCountry": "US" } },
+        "featureList": [
+          "Next Metra train times for your commute",
+          "Live delays and cancellations",
+          "Line-specific service alerts",
+          "Interactive Chicagoland system map",
+          "Morning briefing and departure notifications",
+          "Installable, works offline"
+        ]
+      }
+    ]
+  }
+  </script>
   <script>
     // Apply the saved theme before first paint (no flash). Mirrors resolveTheme() in app.js.
     (function () {
@@ -25,6 +85,15 @@
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
+  <noscript>
+    <div style="max-width:640px;margin:48px auto;padding:0 20px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#111;background:#fff">
+      <h1>Chicagoland Rail — live Metra train times, delays &amp; alerts</h1>
+      <p>Chicagoland Rail is a free, fast web app for riders of Chicago's Metra commuter rail. Choose your line and two stations to see your next trains with live delays, cancellations, and line-specific service alerts. It works on any phone or computer and installs as an app.</p>
+      <p>It covers all 11 Metra lines: BNSF Railway, Union Pacific North (UP-N), Union Pacific Northwest (UP-NW), Union Pacific West (UP-W), Milwaukee District North (MD-N), Milwaukee District West (MD-W), North Central Service (NCS), Heritage Corridor (HC), Rock Island (RI), SouthWest Service (SWS), and Metra Electric (ME).</p>
+      <p><strong>Please enable JavaScript to use the live app.</strong></p>
+      <p style="font-size:12px;color:#555">Not affiliated with or endorsed by Metra. Schedule and service data provided by Metra.</p>
+    </div>
+  </noscript>
   <div id="app">
     <div id="toasts" class="toasts" aria-live="polite"></div>
 

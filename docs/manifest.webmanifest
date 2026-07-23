@@ -1,6 +1,11 @@
 {
-  "name": "Chicagoland Rail",
+  "name": "Chicagoland Rail — Metra Train Times",
   "short_name": "ChiRail",
+  "id": "/",
+  "description": "Your next Metra train with live delays, cancellations, and line service alerts — free, fast, and installable. All 11 Chicagoland commuter-rail lines.",
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": ["travel", "navigation", "utilities"],
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

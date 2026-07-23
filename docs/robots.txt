@@ -1,0 +1,5 @@
+# Chicagoland Rail — https://chicagolandrail.pages.dev
+User-agent: *
+Allow: /
+
+Sitemap: https://chicagolandrail.pages.dev/sitemap.xml
