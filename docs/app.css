@@ -650,6 +650,9 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 @keyframes lmapFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -28; } }
 
 .lmap-line.on .lmap-lbl { display: block; }
+/* on the system view, hovering a line previews its station names (culled so they
+   don't collide), so an unsure rider can see where the line runs */
+.lmap:not(.focus) .lmap-line.hovering .lmap-lbl:not(.culled) { display: block; }
 .lmap-line .lmap-lbl.culled { display: none; }
 /* hovering a dot always reveals its name, even a culled one */
 .lmap.focus .lmap-line.on .lmap-stn:hover + .lmap-lbl { display: block; }
@@ -687,6 +690,18 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
   display: none; position: absolute; left: 10px; bottom: 12px; z-index: 5; pointer-events: none;
   font-size: 11px; color: var(--map-term); background: var(--surface); border: 1px solid var(--map-bg-edge); padding: 4px 10px; border-radius: 999px;
 }
+/* hover caption: the line's name + route, top-left of the map */
+.lmap-caption {
+  display: none; position: absolute; left: 10px; top: 10px; z-index: 6; pointer-events: none;
+  align-items: center; gap: 8px; max-width: calc(100% - 20px);
+  padding: 6px 12px 6px 10px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--map-bg-edge); box-shadow: var(--shadow-sm);
+  font-size: 12px; white-space: nowrap; overflow: hidden;
+}
+.lmap-caption.show { display: inline-flex; }
+.lmap-cap-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+.lmap-cap-name { font-weight: 700; color: var(--text); flex-shrink: 0; }
+.lmap-cap-route { color: var(--map-term); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lmap-focused .lmap-hint { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .lmap-train-halo, .lmap-line.hovering .lmap-core { animation: none; }

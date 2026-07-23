@@ -84,6 +84,7 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
 
   // ---- one <g> per line ----
   const groups = {};
+  const lineInfo = {}; // id -> { name, from, to, color } for the hover caption
   let hoveredId = null; // last line the pointer was over (for tolerant tap-to-select)
   for (const l of lines) {
     const sts = geo[l.id];
@@ -123,8 +124,11 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
         node.addEventListener("click", pickStation);
       }
     }
-    // terminal label (farthest from downtown) always visible on the system view
-    const far = [sts[0], sts.at(-1)].sort((a, b) => d2hub(b) - d2hub(a))[0];
+    // terminal label (farthest from downtown) always visible on the system view;
+    // `near` is the downtown end — both feed the hover caption's route.
+    const ends = [sts[0], sts.at(-1)].sort((a, b) => d2hub(b) - d2hub(a));
+    const far = ends[0], near = ends[1] || ends[0];
+    lineInfo[l.id] = { name: l.name || l.id, from: far.name, to: near.name, color: c };
     const [tx, ty] = pt(far).map(r1);
     const tLeft = tx > hx;
     const term = el("text", { class: "lmap-term", x: r1(tx + (tLeft ? -9 : 9)), y: r1(ty + 3.5), "text-anchor": tLeft ? "end" : "start" });
@@ -302,12 +306,14 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
       ctrl.resetZoom();
       ctrl.select(null);
     },
-    // hover = highlight ONLY. No raiseLine here: re-appending the hovered group churns
-    // the DOM under the cursor, and some browsers respond by canceling the click that
-    // follows — the "hover works but the tap does nothing" bug. The picked line
-    // z-raises on focus() instead, which is a deliberate tap, not a passing hover.
+    // hover = highlight + name the line (caption) + reveal its station names, so an
+    // unsure rider can see what a line is and where it runs without looking away.
+    // No raiseLine here: re-appending the hovered group churns the DOM under the cursor
+    // and some browsers cancel the click that follows (the "tap does nothing" bug). The
+    // picked line z-raises on focus() instead — a deliberate tap, not a passing hover.
     hover(lineId) {
       for (const id in groups) groups[id].g.classList.toggle("hovering", id === lineId);
+      if (lineId) { showCaption(lineId); revealStops(lineId); } else { hideCaption(); }
     },
     zoomTo(lineId) { focusedId = lineId; fitView(lineId); },
     resetZoom() {
@@ -404,6 +410,28 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
   hint.className = "lmap-hint";
   hint.textContent = "Pinch, scroll, or tap + to zoom in for every stop";
   host.appendChild(hint);
+
+  // Hover caption (system view): names the hovered line and its route, so a rider who
+  // isn't sure which line to pick can read it right off the map.
+  const caption = document.createElement("div");
+  caption.className = "lmap-caption";
+  host.appendChild(caption);
+  function showCaption(lineId) {
+    const info = lineInfo[lineId];
+    if (!info || svg.classList.contains("focus")) return;
+    caption.textContent = "";
+    const dot = document.createElement("span"); dot.className = "lmap-cap-dot"; dot.style.background = info.color;
+    const name = document.createElement("span"); name.className = "lmap-cap-name"; name.textContent = info.name;
+    const route = document.createElement("span"); route.className = "lmap-cap-route"; route.textContent = `${info.from} → ${info.to}`;
+    caption.append(dot, name, route);
+    caption.classList.add("show");
+  }
+  function hideCaption() { caption.classList.remove("show"); }
+  // Reveal the hovered line's station names on the system view, culled so they don't
+  // collide (getBBox is a no-op in tests → all names simply show, which is fine).
+  function revealStops(lineId) {
+    if (lineId && !svg.classList.contains("focus")) cullLabels(lineId, view.s, view.tx, view.ty);
+  }
 
   return ctrl;
 }
