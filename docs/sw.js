@@ -1,7 +1,7 @@
 // App-shell cache (cache-first) + API passthrough with cached fallback.
 // The API is on a different origin (the Worker); we don't cache cross-origin
 // API responses in the SW — the app keeps its own last-good copy in memory.
-const SHELL = "mct-shell-v59";
+const SHELL = "mct-shell-v60";
 const SHELL_ASSETS = [
   "./", "./index.html", "./app.js", "./app.css", "./logic.js", "./config.js", "./map.js", "./fonts.css",
   "./manifest.webmanifest", "./icons/icon192.png", "./icons/icon128.png", "./icons/icon32.png",
