@@ -90,7 +90,11 @@ async function route(request, env, ctx) {
           const route = url.searchParams.get("route");
           if (!route) throw bad("route parameter required");
           const data = await kv(env, `stops:${route}`);
-          return json(env, { route, stations: data.stations }, 200, 86400);
+          // branch-aware geometry so a Y-line (e.g. UP-NW → Harvard + McHenry) draws
+          // its real spurs instead of one zigzag through both terminals.
+          let segments = [];
+          try { segments = branchSegments((await kv(env, `sched:${route}`)).trips); } catch { /* optional */ }
+          return json(env, { route, stations: data.stations, segments }, 200, 86400);
         }
         case "/api/alerts": {
           const route = url.searchParams.get("route");
@@ -238,4 +242,37 @@ function within(stations, s, from, to) {
   if (a === -1 || b === -1) return false;
   const i = ids.indexOf(s.id);
   return i >= Math.min(a, b) && i <= Math.max(a, b);
+}
+
+// Branch-aware line geometry for the system map: the set of unique consecutive-station
+// edges [fromId, toId], taken from only the "maximal" stop patterns. A pattern that's a
+// subsequence of another (an express or a turnback) is dropped, so express trips never
+// draw shortcut lines; a branching line (UP-NW → Harvard AND McHenry) keeps both spurs,
+// and the shared trunk dedupes to single edges. Directions are canonicalized so an
+// outbound trip and its inbound twin collapse to one pattern.
+export function branchSegments(trips) {
+  const seqs = new Map();
+  for (const t of trips || []) {
+    let ids = (t.st || []).map(x => x[0]).filter((v, i, a) => i === 0 || v !== a[i - 1]);
+    if (ids.length < 2) continue;
+    if (ids[0] > ids[ids.length - 1]) ids = ids.slice().reverse(); // canonical direction
+    seqs.set(ids.join(">"), ids);
+  }
+  const list = [...seqs.values()];
+  const isSubseq = (s, t) => {
+    if (s === t || s.length >= t.length) return false;
+    let i = 0;
+    for (const x of t) if (x === s[i] && ++i === s.length) return true;
+    return false;
+  };
+  const maximal = list.filter(s => !list.some(t => isSubseq(s, t)));
+  const seen = new Set(), segments = [];
+  for (const seq of maximal) {
+    for (let i = 1; i < seq.length; i++) {
+      const a = seq[i - 1], b = seq[i];
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+      if (!seen.has(key)) { seen.add(key); segments.push([a, b]); }
+    }
+  }
+  return segments;
 }

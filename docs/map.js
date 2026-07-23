@@ -41,7 +41,7 @@ const SHORE = [
   [41.60, -87.25], [41.55, -86.90],
 ];
 
-export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover }) {
+export function createMap(host, { lines, stopsByLine, segmentsByLine = {}, onLine, onStation, onHover }) {
   const geo = {};
   for (const l of lines) geo[l.id] = (stopsByLine[l.id] || []).filter(s => s.lat != null && s.lon != null);
   const all = Object.values(geo).flat();
@@ -90,7 +90,13 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
     const sts = geo[l.id];
     if (sts.length < 2) continue;
     const c = lift(l.color);
-    const path = "M " + sts.map(st => pt(st).map(r1).join(",")).join(" L ");
+    // Draw the real track topology from branch segments (edges) when available, so a
+    // Y-line draws both spurs; fall back to a single polyline through the stops.
+    const coord = {}; for (const s of sts) coord[s.id] = pt(s).map(r1).join(",");
+    const segs = (segmentsByLine[l.id] || []).filter(([a, b]) => coord[a] && coord[b]);
+    const path = segs.length
+      ? segs.map(([a, b]) => `M ${coord[a]} L ${coord[b]}`).join(" ")
+      : "M " + sts.map(st => pt(st).map(r1).join(",")).join(" L ");
     const g = el("g", { class: "lmap-line", "data-id": l.id });
     g.style.setProperty("--c", c);
     // non-scaling-stroke keeps line/dot widths crisp (constant screen px) when zoomed
