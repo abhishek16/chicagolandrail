@@ -22,6 +22,9 @@ function applyLineTheme(rawColor) {
 
 const $ = s => document.querySelector(s);
 const POLL_MS = 30000;
+// Declared up here (not by the flap board below) because the visitor counter can
+// paint during init() — before a bottom-of-file const would be initialized (TDZ).
+const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ---------- state ----------
 const store = {
@@ -1673,7 +1676,8 @@ function fmtDur(min) { const h = Math.floor(min / 60), m = min % 60; return h ? 
 // Small clock glyph marking a journey duration.
 const JT_ICON = `<svg class="jt-ico" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.6V8l2.4 1.4"/></svg>`;
 // ---------- split-flap countdown board ----------
-const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// REDUCE_MOTION is declared near the top of this file (the visitor counter needs
+// it during init(), before this point in module evaluation).
 
 // Padded MM:SS (or H:MM:SS) so the board keeps a fixed number of cards within an hour.
 function fmtFlap(epochMs) {
