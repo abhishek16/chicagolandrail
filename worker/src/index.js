@@ -13,6 +13,7 @@ import { kv, json as baseJson, bad, nextScheduled, timetableFor, secToClock, chi
 import { fetchFeed, indexTripUpdates, delayAt, alertsForRoute, positionFor } from "./realtime.js";
 import { runPushCycle } from "./poller.js";
 import { weatherFor } from "./weather.js";
+import { registerVisit, getVisitStats } from "./visits.js";
 
 // CORS: ALLOWED_ORIGIN is a comma-separated allowlist. We echo the caller's
 // Origin when it's on the list, so the Cloudflare Pages site, a future custom
@@ -72,6 +73,7 @@ async function route(request, env, ctx) {
       if (request.method === "POST") {
         if (url.pathname === "/api/push/subscribe") return pushSubscribe(request, env);
         if (url.pathname === "/api/push/unsubscribe") return pushUnsubscribe(request, env);
+        if (url.pathname === "/api/visit") return json(env, await registerVisit(env), 200);
         return json(env, { error: "not found" }, 404);
       }
       if (request.method !== "GET") return json(env, { error: "method not allowed" }, 405);
@@ -116,6 +118,8 @@ async function route(request, env, ctx) {
           })));
           return json(env, data, 200, 1800);
         }
+        case "/api/visits":
+          return json(env, await getVisitStats(env), 200, 30);
         case "/api/next":
           return handleNext(url, env, waitUntil);
         default:

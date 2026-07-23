@@ -727,9 +727,29 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 
 /* ---- footer / attribution ---- */
 .site-foot { margin-top: 6px; }
-.built-by { padding: 14px 16px 0; font-size: 12px; color: var(--muted); text-align: center; }
-.built-by a { color: var(--line); text-decoration: none; font-weight: 500; }
-.built-by a:hover { text-decoration: underline; }
+/* "Built by …" is a button that opens the About sheet (visitor count lives there) */
+button.built-by {
+  display: block; width: 100%; margin: 0; padding: 14px 16px 0;
+  background: none; border: 0; cursor: pointer; font: inherit;
+  font-size: 12px; color: var(--muted); text-align: center;
+}
+button.built-by .bb-em { color: var(--line); font-weight: 500; }
+button.built-by:hover .bb-em { text-decoration: underline; }
+button.built-by:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; border-radius: 6px; }
+
+/* visitor counter inside the About sheet */
+.about-by { padding: 4px 0 0; font-size: 13px; color: var(--muted); text-align: center; }
+.about-by a { color: var(--line); text-decoration: none; font-weight: 500; }
+.about-by a:hover { text-decoration: underline; }
+.visits { margin: 16px 0 6px; text-align: center; }
+.visits-label {
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 12px;
+}
+.visits-flap { justify-content: center; }
+.visits-spark { display: block; width: 160px; height: 34px; margin: 16px auto 4px; overflow: visible; }
+.visits-total { margin-top: 10px; }
+.visits-total b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 700; }
 .disclaimer {
   padding: 6px 16px calc(14px + env(safe-area-inset-bottom));
   font-size: 10px; line-height: 1.5; color: var(--muted); text-align: center;

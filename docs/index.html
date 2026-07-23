@@ -57,7 +57,7 @@
         <span id="rt-status"></span>
       </footer>
       <div class="site-foot">
-        <p class="built-by">Built by <a href="mailto:resoluteacc@gmail.com">resoluteacc@gmail.com</a></p>
+        <button type="button" class="built-by" data-about aria-haspopup="dialog">Built by <span class="bb-em">resoluteacc@gmail.com</span></button>
         <p class="disclaimer">Not affiliated with or endorsed by Metra. Schedule and service data provided by Metra.</p>
       </div>
     </div>
@@ -131,7 +131,7 @@
           <button id="reset-app" class="ghost wide danger">Erase all data &amp; start over</button>
         </section>
         <footer class="site-foot">
-          <p class="built-by">Built by <a href="mailto:resoluteacc@gmail.com">resoluteacc@gmail.com</a></p>
+          <button type="button" class="built-by" data-about aria-haspopup="dialog">Built by <span class="bb-em">resoluteacc@gmail.com</span></button>
           <p class="disclaimer">Not affiliated with or endorsed by Metra. Schedule and service data provided by Metra.</p>
         </footer>
       </main>
@@ -158,7 +158,7 @@
         <div id="wiz-list" class="wiz-list"></div>
       </main>
       <footer class="site-foot">
-        <p class="built-by">Built by <a href="mailto:resoluteacc@gmail.com">resoluteacc@gmail.com</a></p>
+        <button type="button" class="built-by" data-about aria-haspopup="dialog">Built by <span class="bb-em">resoluteacc@gmail.com</span></button>
         <p class="disclaimer">Not affiliated with or endorsed by Metra. Schedule and service data provided by Metra.</p>
       </footer>
     </div>
@@ -182,6 +182,29 @@
         </label>
         <button id="oo-go" class="primary">View trip</button>
         <p id="oo-error" class="error hidden"></p>
+      </div>
+    </div>
+
+    <!-- ============ ABOUT / BUILT-BY SHEET (shared by all views) ============ -->
+    <div id="about-modal" class="sheet-backdrop hidden">
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="about-title">
+        <div class="sheet-head">
+          <h2 id="about-title">Built by</h2>
+          <button id="about-close" class="icon-btn" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <p class="muted small">A free, independent companion for Chicagoland Metra riders.</p>
+
+        <div id="visits" class="visits" hidden>
+          <div class="visits-label">Riders aboard today</div>
+          <div id="visits-flap" class="flapboard visits-flap" role="img" aria-label="Visitors today"></div>
+          <svg id="visits-spark" class="visits-spark hidden" viewBox="0 0 160 34" aria-hidden="true"></svg>
+          <div id="visits-total" class="visits-total muted small"></div>
+        </div>
+
+        <p class="about-by">Questions or ideas? <a href="mailto:resoluteacc@gmail.com">resoluteacc@gmail.com</a></p>
+        <p class="disclaimer">Not affiliated with or endorsed by Metra. Schedule and service data provided by Metra.</p>
       </div>
     </div>
 

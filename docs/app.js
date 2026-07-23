@@ -47,6 +47,7 @@ let weatherCache = new Map();    // stationId -> { periods, at }
 let oneOff = null;               // transient one-off trip (not saved), overrides active route
 let stripReversed = {};          // per-direction reverse flag for the route diagram (point: reversible list)
 let ooStations = [];             // stations for the one-off line picker
+let lastVisitStats = null;       // last-known /api/visits stats for the About sheet
 
 // ---------- persistent offline cache (survives reload/underground) ----------
 const cacheKey = id => "mct_cache_" + id;
@@ -83,6 +84,8 @@ async function init() {
   initAnalytics();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").then(r => swReg = r).catch(() => {});
   S.visits = (S.visits || 0) + 1; persist(); // paces the contextual briefing nudge
+  initAbout();  // "Built by" sheet + live visitor counter
+  pingVisit();  // count this browser once per Chicago day (non-blocking)
   try { lines = await api("/api/lines"); } catch { lines = []; }
   api("/api/meta").then(m => { meta = m; }).catch(() => {}); // for stale-data warning
   initOneOff();
@@ -752,6 +755,105 @@ function initOneOff() {
 }
 function openOneOff() { $("#oo-error").classList.add("hidden"); $("#oo-modal").classList.remove("hidden"); }
 function closeOneOff() { $("#oo-modal").classList.add("hidden"); }
+
+// ============================================================
+// ABOUT SHEET + LIVE VISITOR COUNTER
+// ============================================================
+// The three "Built by" footers open one shared sheet; inside, today's visitor
+// count rolls up on the app's own split-flap board. The count is global (Worker +
+// KV); everything degrades quietly if those endpoints aren't reachable.
+
+// This browser's current day in Chicago time, matching the server's day boundary.
+function chicagoDay() {
+  try { return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date()); }
+  catch { return new Date().toISOString().slice(0, 10); }
+}
+
+// Count this browser as a visitor at most once per Chicago day (keeps the number
+// reading as unique daily riders and stays well inside KV's write budget).
+function pingVisit() {
+  const today = chicagoDay();
+  if (S.visitPing === today) { renderVisits(loadVisitStats()); return; } // already counted today
+  apiPost("/api/visit", {}).then(stats => {
+    S.visitPing = today; persist();
+    cacheVisitStats(stats); renderVisits(stats);
+  }).catch(() => { /* offline or endpoint not live yet — retry next boot */ });
+}
+
+function cacheVisitStats(stats) {
+  if (!stats || typeof stats.today !== "number") return;
+  lastVisitStats = stats;
+  try { localStorage.setItem("mct_visits", JSON.stringify(stats)); } catch { /* quota */ }
+}
+function loadVisitStats() {
+  if (lastVisitStats) return lastVisitStats;
+  try { return JSON.parse(localStorage.getItem("mct_visits") || "null"); } catch { return null; }
+}
+
+function initAbout() {
+  document.querySelectorAll(".built-by[data-about]").forEach(b => b.onclick = openAbout);
+  const close = $("#about-close"), modal = $("#about-modal");
+  if (close) close.onclick = closeAbout;
+  if (modal) modal.onclick = e => { if (e.target === modal) closeAbout(); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeAbout(); });
+}
+function openAbout() {
+  const modal = $("#about-modal"); if (!modal) return;
+  modal.classList.remove("hidden");
+  renderVisits(loadVisitStats());                         // instant paint from cache
+  api("/api/visits").then(stats => { cacheVisitStats(stats); renderVisits(stats); }).catch(() => {});
+}
+function closeAbout() { const m = $("#about-modal"); if (m) m.classList.add("hidden"); }
+
+// Paint the counter block: big split-flap "today", a 7-day sparkline, all-time total.
+function renderVisits(stats) {
+  const wrap = $("#visits"); if (!wrap) return;
+  if (!stats || typeof stats.today !== "number") { wrap.hidden = true; return; }
+  wrap.hidden = false;
+
+  const flap = $("#visits-flap");
+  if (flap) {
+    flap.setAttribute("aria-label", `${stats.today.toLocaleString()} ${stats.today === 1 ? "rider" : "riders"} aboard today`);
+    paintFlapNumber(flap, String(Math.max(0, stats.today)));
+  }
+  renderVisitSpark($("#visits-spark"), stats.days || []);
+  const tot = $("#visits-total");
+  if (tot) tot.innerHTML = typeof stats.total === "number" ? `<b>${stats.total.toLocaleString()}</b> all-time` : "";
+}
+
+// Render a number onto a flap board and roll it up with a staggered Solari reveal
+// (reuses the departure-board cards so it matches the countdown exactly).
+function paintFlapNumber(el, digits) {
+  el.innerHTML = digits.split("").map(() => cardOrColon("0")).join("");
+  const cards = [...el.children];
+  cards.forEach((card, i) => {
+    const target = digits[i];
+    if (target === "0") return;                              // card already reads 0
+    if (REDUCE_MOTION) { flipCardTo(card, target); return; } // no stagger, land immediately
+    setTimeout(() => flipCardTo(card, target), 140 + i * 110);
+  });
+}
+
+// Tiny bar sparkline of the last several days; today's bar is highlighted.
+function renderVisitSpark(svg, days) {
+  if (!svg) return;
+  const data = (days || []).slice(-7);
+  if (data.length < 2) { svg.classList.add("hidden"); return; }
+  svg.classList.remove("hidden");
+  const W = 160, H = 34, gap = 5, cnt = data.length;
+  const bw = (W - gap * (cnt - 1)) / cnt;
+  const max = Math.max(1, ...data.map(d => d.count));
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = data.map((d, i) => {
+    const h = Math.max(2, Math.round((d.count / max) * (H - 4)));
+    const x = i * (bw + gap), y = H - h, today = i === cnt - 1;
+    return `<rect x="${x.toFixed(1)}" y="${y}" width="${bw.toFixed(1)}" height="${h}" rx="1.5" fill="var(--line)" opacity="${today ? 1 : 0.38}"><title>${d.count} on ${fmtVisitDay(d.date)}</title></rect>`;
+  }).join("");
+}
+function fmtVisitDay(ymd) { // "20260721" -> "Jul 21"
+  const y = +ymd.slice(0, 4), m = +ymd.slice(4, 6) - 1, d = +ymd.slice(6, 8);
+  return new Date(Date.UTC(y, m, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
 
 // ============================================================
 // MAIN VIEW
