@@ -213,6 +213,12 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
     const picks = [...svg.querySelectorAll(".lmap-stn.from,.lmap-stn.to")].map(n => n.getAttribute("data-id"));
     const order = [...new Set([...picks, ids[0], ids[ids.length - 1], ...ids])];
     const placed = [];
+    // Seed with the always-visible "CHICAGO" hub label so a line's downtown terminal
+    // name is culled instead of overlapping it (the hover caption still names the route).
+    try {
+      const hb = hubLbl.getBBox();
+      if (hb && hb.width) placed.push({ l: hb.x * s + tx, r: (hb.x + hb.width) * s + tx, t: hb.y * s + ty, b: (hb.y + hb.height) * s + ty });
+    } catch { /* no layout (tests) */ }
     for (const id of order) {
       const lbl = els[id].lbl;
       let bb; try { bb = lbl.getBBox(); } catch { return; } // no layout (tests) → leave all shown
