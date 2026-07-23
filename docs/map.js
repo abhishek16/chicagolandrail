@@ -125,9 +125,6 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
     g.appendChild(term);
 
     const hit = g.querySelector(".lmap-hit");
-    // Selection is handled by a tolerant SVG-level click (see below), NOT a per-line
-    // click — a thin diagonal hit path is easy to miss on a tap, so resolving the
-    // line from the click target OR the last-hovered line makes selection land.
     // Desktop hover just HIGHLIGHTS the line — it never moves the camera. (Zooming
     // on hover pans the map under a stationary cursor, which lands the cursor on a
     // different line and re-triggers → the jumping. The glide happens on tap/focus.)
@@ -135,6 +132,13 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
     // card in the list below (a clear two-way link between map and picker).
     hit.addEventListener("mouseenter", () => { if (!svg.classList.contains("focus")) { hoveredId = l.id; ctrl.hover(l.id); onHover && onHover(l.id); } });
     hit.addEventListener("mouseleave", () => { if (!svg.classList.contains("focus")) { hoveredId = null; ctrl.hover(null); onHover && onHover(null); } });
+    // SELECT on a direct tap of the hit path. This is the SAME element that reliably
+    // receives the hover above, and it uses the closure's l.id — so selection never
+    // depends on event bubbling up to the svg, on Element.closest(), or on hoveredId
+    // (any of which can silently fail to resolve a line in some browsers, which is why
+    // "tapping a line did nothing" while hover worked). pointerup covers touch too.
+    const pick = e => { if (!svg.classList.contains("focus")) { e.stopPropagation(); onLine && onLine(l.id); } };
+    hit.addEventListener("click", pick);
     cam.appendChild(g);
     groups[l.id] = { g, stnEls };
   }
