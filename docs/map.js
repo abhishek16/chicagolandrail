@@ -110,11 +110,18 @@ export function createMap(host, { lines, stopsByLine, onLine, onStation, onHover
       lbl.textContent = st.name;
       g.appendChild(lbl);
       stnEls[st.id] = { dot, lbl, x, y };
-      dot.addEventListener("click", e => {
+      // Select this station from the dot OR its name label (both, focused view only).
+      // pointerup + click for the same robustness as line taps; a duplicate is a no-op
+      // (the app's step guard ignores it). CSS makes the label clickable when focused.
+      const pickStation = e => {
         if (!g.classList.contains("on")) return;      // only tappable while focused
         e.stopPropagation();
         onStation && onStation(l.id, st.id);
-      });
+      };
+      for (const node of [dot, lbl]) {
+        node.addEventListener("pointerup", pickStation);
+        node.addEventListener("click", pickStation);
+      }
     }
     // terminal label (farthest from downtown) always visible on the system view
     const far = [sts[0], sts.at(-1)].sort((a, b) => d2hub(b) - d2hub(a))[0];

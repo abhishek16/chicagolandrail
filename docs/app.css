@@ -660,6 +660,8 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .lmap.focus .lmap-line.on .lmap-core { stroke-width: 4; }
 .lmap.focus .lmap-line.on .lmap-glow { stroke-opacity: 0.4; stroke-width: 12; }
 .lmap.focus .lmap-line.on .lmap-stn { r: 3.4; cursor: pointer; pointer-events: auto; }
+/* the name label is tappable too (the stroke halo widens the hit area past the glyphs) */
+.lmap.focus .lmap-line.on .lmap-lbl { pointer-events: auto; cursor: pointer; }
 .lmap-line .lmap-stn.from { fill: var(--c); stroke: var(--map-ink); stroke-width: 2; r: 4.5; }
 .lmap-line .lmap-stn.to { fill: var(--map-ink); stroke: var(--c); stroke-width: 2.5; r: 4.5; }
 .lmap-line .lmap-lbl.pick { display: block; fill: var(--map-ink); font-weight: 800; }
