@@ -31,6 +31,14 @@ const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-m
 const themeMedia = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
 let resolvedTheme = "dark";
 
+// scrollIntoView (especially with an options object) throws in some embedded
+// browsers/webviews (and jsdom). A cosmetic scroll must never break a flow — one
+// such throw between a map tap and pickWizLine was the "tapping a line does nothing"
+// bug. Always route scrolls through this.
+function scrollIntoViewSafe(el, opts) {
+  try { if (el && el.scrollIntoView) el.scrollIntoView(opts); } catch { /* embedded browser */ }
+}
+
 // ---------- state ----------
 const store = {
   load() {
@@ -248,7 +256,7 @@ function showSetup(opts = {}) {
   if (opts.scrollTo) {
     const target = $(opts.scrollTo);
     if (target) setTimeout(() =>
-      target.scrollIntoView({ behavior: REDUCE_MOTION ? "auto" : "smooth", block: "start" }), 60);
+      scrollIntoViewSafe(target, { behavior: REDUCE_MOTION ? "auto" : "smooth", block: "start" }), 60);
   }
 }
 
@@ -366,7 +374,7 @@ function updateGates({ scroll = false } = {}) {
     if (was && open && !unlocked) unlocked = el; // first section that just opened
   }
   if (scroll && unlocked) {
-    unlocked.scrollIntoView({ behavior: REDUCE_MOTION ? "auto" : "smooth", block: "start" });
+    scrollIntoViewSafe(unlocked, { behavior: REDUCE_MOTION ? "auto" : "smooth", block: "start" });
     unlocked.classList.remove("just-unlocked"); void unlocked.offsetWidth; unlocked.classList.add("just-unlocked");
   }
 }
@@ -450,7 +458,11 @@ function applyMapState() {
   }
 }
 
-function onMapLine(id) { if (wiz && wiz.step === 1) { highlightWizLine(id, true); pickWizLine(id); } }
+// Tapping a line goes straight to station selection. Don't highlight/scroll the
+// step-1 card first: we leave step 1 immediately, and a throwing scrollIntoView (some
+// browsers/webviews) would otherwise abort the tap before pickWizLine ran — the
+// "tapping a line does nothing" bug, while hover (no scroll) kept working.
+function onMapLine(id) { if (wiz && wiz.step === 1) pickWizLine(id); }
 function onMapStation(lineId, sid) { if (wiz && (wiz.step === 2 || wiz.step === 3)) pickWizStation(sid); }
 function onMapHover(id) { if (wiz && wiz.step === 1) highlightWizLine(id); }
 
@@ -466,7 +478,7 @@ function highlightWizLine(id, scroll = false) {
   const l = lines.find(x => x.id === id);
   row.classList.add("hl");
   if (l) { row.style.borderColor = l.color; row.style.boxShadow = `0 0 0 1px ${l.color}`; }
-  if (scroll) row.scrollIntoView({ block: "nearest" });
+  if (scroll) scrollIntoViewSafe(row, { block: "nearest" });
 }
 
 function wizBack() {
