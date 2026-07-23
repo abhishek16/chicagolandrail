@@ -442,7 +442,14 @@ export function createMap(host, { lines, stopsByLine, segmentsByLine = {}, onLin
   // Reveal the hovered line's station names on the system view, culled so they don't
   // collide (getBBox is a no-op in tests → all names simply show, which is fine).
   function revealStops(lineId) {
-    if (lineId && !svg.classList.contains("focus")) cullLabels(lineId, view.s, view.tx, view.ty);
+    if (!lineId || svg.classList.contains("focus")) return;
+    // Defer to the next frame: the labels just flipped from display:none, and getBBox
+    // returns 0 that instant → cullLabels would bail and leave EVERY name shown (the
+    // cluttered hover). Next frame they have real layout, so culling actually thins them.
+    raf(() => {
+      const g = groups[lineId] && groups[lineId].g;
+      if (g && g.classList.contains("hovering") && !svg.classList.contains("focus")) cullLabels(lineId, view.s, view.tx, view.ty);
+    });
   }
 
   return ctrl;

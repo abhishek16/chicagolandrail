@@ -93,7 +93,7 @@ async function route(request, env, ctx) {
           // branch-aware geometry so a Y-line (e.g. UP-NW → Harvard + McHenry) draws
           // its real spurs instead of one zigzag through both terminals.
           let segments = [];
-          try { segments = branchSegments((await kv(env, `sched:${route}`)).trips); } catch { /* optional */ }
+          try { segments = branchSegments((await kv(env, `sched:${route}`)).trips, data.stations); } catch { /* optional */ }
           return json(env, { route, stations: data.stations, segments }, 200, 86400);
         }
         case "/api/alerts": {
@@ -250,7 +250,7 @@ function within(stations, s, from, to) {
 // draw shortcut lines; a branching line (UP-NW → Harvard AND McHenry) keeps both spurs,
 // and the shared trunk dedupes to single edges. Directions are canonicalized so an
 // outbound trip and its inbound twin collapse to one pattern.
-export function branchSegments(trips) {
+export function branchSegments(trips, stations = []) {
   const seqs = new Map();
   for (const t of trips || []) {
     let ids = (t.st || []).map(x => x[0]).filter((v, i, a) => i === 0 || v !== a[i - 1]);
@@ -274,5 +274,30 @@ export function branchSegments(trips) {
       if (!seen.has(key)) { seen.add(key); segments.push([a, b]); }
     }
   }
-  return segments;
+  return mstReduce(segments, stations);
+}
+
+// A rail line is geographically a tree, so reduce the candidate edges to a minimum
+// spanning tree weighted by distance between stops. Real adjacent-stop edges are short
+// and kept; an express "shortcut" edge (which spans a skipped stop) is longer than the
+// path it bypasses, so it closes a cycle and is dropped — no more parallel/split lines.
+function mstReduce(edges, stations) {
+  const coord = {};
+  for (const s of stations || []) if (s && s.lat != null && s.lon != null) coord[s.id] = s;
+  if (edges.length < 2 || Object.keys(coord).length < 2) return edges;
+  const w = ([a, b]) => {
+    const p = coord[a], q = coord[b];
+    if (!p || !q) return Number.POSITIVE_INFINITY; // keep coord-less edges (sorted last)
+    const dLat = p.lat - q.lat, dLon = (p.lon - q.lon) * Math.cos((p.lat * Math.PI) / 180);
+    return dLat * dLat + dLon * dLon;
+  };
+  const parent = new Map();
+  for (const [a, b] of edges) { if (!parent.has(a)) parent.set(a, a); if (!parent.has(b)) parent.set(b, b); }
+  const find = x => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+  const mst = [];
+  for (const [a, b] of edges.slice().sort((e1, e2) => w(e1) - w(e2))) {
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) { parent.set(ra, rb); mst.push([a, b]); }
+  }
+  return mst;
 }
