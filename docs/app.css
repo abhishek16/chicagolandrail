@@ -182,8 +182,9 @@ h1 .arrow { color: var(--line); }
 }
 .rs-rev:hover { border-color: var(--line); color: var(--text); }
 .rs-body { position: relative; max-height: 300px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-/* flex row: rail | name (truncates) | tag | time — nothing overlaps */
-.rs-stop { display: flex; align-items: center; height: 34px; gap: 4px; }
+/* flex row: rail | name (truncates) | tag | time — nothing overlaps.
+   padding-right keeps the time clear of the scrollbar when the list scrolls. */
+.rs-stop { display: flex; align-items: center; height: 34px; gap: 4px; padding-right: 10px; }
 .rs-rail { position: relative; width: 26px; flex-shrink: 0; height: 100%; display: flex; justify-content: center; }
 .rs-rail::before { content: ""; position: absolute; top: 0; bottom: 0; width: 3px; background: var(--line); opacity: 0.5; }
 .rs-stop:first-child .rs-rail::before { top: 50%; }
