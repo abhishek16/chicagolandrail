@@ -16,6 +16,27 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
   --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.55);
   --board: "Overpass Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  /* semantic warning/alert surfaces — flip with the theme */
+  --warn-bg: #33280F; --warn-edge: #46370F; --warn-text: #F2C766;
+  --danger-bg: #3E1A18; --danger-edge: #582522; --danger-text: #F5A79F;
+  /* Living Map canvas — flips with the theme (line stroke colors are per-line) */
+  --map-bg: #0A0F15; --map-bg-edge: #17222E; --map-water: #123049; --map-water-edge: #2A5074;
+  --map-ink: #FFFFFF; --map-ink-halo: #05090E; --map-term: #AEBAC7;
+}
+/* ---- Light theme (opt-in via data-theme="light" on <html>) ----
+   Only the variables flip; the split-flap board and the immersive onboarding map
+   stay dark by design (a real Solari board is dark, the intro is full-bleed). */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F2F5F9; --surface: #FFFFFF; --text: #15212D; --muted: #59636F; --border: #DCE3EC;
+  --line: #0E7B59; --line-ink: #FFFFFF;
+  --express: #A8560A; --green: #0E9E68; --amber: #A8560A; --red: #C63A30;
+  --shadow-sm: 0 1px 2px rgba(20, 40, 65, 0.08);
+  --shadow-md: 0 12px 30px rgba(20, 40, 70, 0.14);
+  --warn-bg: #FBF0D3; --warn-edge: #ECD9A0; --warn-text: #7A560F;
+  --danger-bg: #FCE6E3; --danger-edge: #F2C3BD; --danger-text: #98271E;
+  --map-bg: #E9F0F7; --map-bg-edge: #CCD8E4; --map-water: #C9E1F1; --map-water-edge: #99C1DC;
+  --map-ink: #12202E; --map-ink-halo: #FFFFFF; --map-term: #55636F;
 }
 * { box-sizing: border-box; margin: 0; }
 button, select, input { touch-action: manipulation; font: inherit; }
@@ -72,7 +93,7 @@ h1 .arrow { color: var(--line); }
 #line-pill { padding: 0; }
 .alert-chip {
   display: inline-flex; align-items: center; font: inherit; font-size: 11.5px; font-weight: 700;
-  color: #F2C766; background: #33280F; border: 1px solid #46370F; border-radius: 999px;
+  color: var(--warn-text); background: var(--warn-bg); border: 1px solid var(--warn-edge); border-radius: 999px;
   padding: 4px 11px; cursor: pointer;
 }
 .alert-chip:hover { filter: brightness(1.12); }
@@ -85,7 +106,7 @@ h1 .arrow { color: var(--line); }
 }
 .toast {
   pointer-events: auto; display: flex; gap: 10px; align-items: flex-start;
-  background: #2A230D; color: #F4D488; border: 1px solid #4A3B12; border-radius: 12px;
+  background: var(--warn-bg); color: var(--warn-text); border: 1px solid var(--warn-edge); border-radius: 12px;
   padding: 11px 12px; box-shadow: var(--shadow-md);
   opacity: 0; transform: translateY(-12px); transition: opacity 0.35s ease, transform 0.35s ease;
 }
@@ -94,8 +115,8 @@ h1 .arrow { color: var(--line); }
 .toast-ico { flex-shrink: 0; font-size: 15px; line-height: 1.3; }
 .toast-body { flex: 1; min-width: 0; font-size: 13px; }
 .toast-body b { display: block; font-weight: 700; }
-.toast-body span { display: block; color: #D8BE7C; margin-top: 2px; }
-.toast-x { flex-shrink: 0; border: none; background: transparent; color: #C7A85E; font-size: 13px; cursor: pointer; padding: 2px 4px; }
+.toast-body span { display: block; color: var(--warn-text); opacity: 0.82; margin-top: 2px; }
+.toast-x { flex-shrink: 0; border: none; background: transparent; color: var(--warn-text); opacity: 0.72; font-size: 13px; cursor: pointer; padding: 2px 4px; }
 @media (prefers-reduced-motion: reduce) { .toast { transition: opacity 0.2s ease; } .toast.in, .toast.out { transform: none; } }
 .line-pill {
   display: inline-flex; align-items: center; gap: 7px;
@@ -128,11 +149,11 @@ h1 .arrow { color: var(--line); }
 #alerts { padding: 0; }
 .alert {
   display: flex; gap: 10px; padding: 10px 16px; font-size: 13px;
-  background: #33280F; color: #F2C766; border-bottom: 1px solid #46370F;
+  background: var(--warn-bg); color: var(--warn-text); border-bottom: 1px solid var(--warn-edge);
 }
 .alert::before { content: "⚠"; }
-.alert.severe { background: #3E1A18; color: #F5A79F; border-bottom-color: #582522; }
-.banner { padding: 9px 16px; font-size: 13px; background: #33290F; color: #F2C766; border-bottom: 1px solid #46370F; }
+.alert.severe { background: var(--danger-bg); color: var(--danger-text); border-bottom-color: var(--danger-edge); }
+.banner { padding: 9px 16px; font-size: 13px; background: var(--warn-bg); color: var(--warn-text); border-bottom: 1px solid var(--warn-edge); }
 .banner.offline { background: transparent; color: var(--muted); border-bottom: 1px solid var(--border); }
 
 /* ---- collapsible stops (default closed; hero + each later train) ---- */
@@ -533,6 +554,9 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
   --bg: #0A0F15; --surface: #0E151E; --text: #E9EDF2;
   --muted: #7E8A97; --border: #223041;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5); --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
+  /* the immersive onboarding map stays dark regardless of the app theme */
+  --map-bg: #0A0F15; --map-bg-edge: #17222E; --map-water: #123049; --map-water-edge: #2A5074;
+  --map-ink: #FFFFFF; --map-ink-halo: #05090E; --map-term: #AEBAC7;
   background: var(--bg); color: var(--text);
 }
 .wiz-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0; }
@@ -600,25 +624,25 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 
 /* the map itself is the primary picker (steps 1-3) */
 .wiz-map { margin: 10px 10px 0; border-radius: 16px; overflow: hidden;
-  background: #0A0F15; border: 1px solid #17222E; position: relative; }
+  background: var(--map-bg); border: 1px solid var(--map-bg-edge); position: relative; }
 .lmap-load { min-height: 260px; display: flex; align-items: center; justify-content: center;
   color: var(--muted); font-size: 13px; text-align: center; padding: 24px; }
 .lmap { width: 100%; height: auto; display: block; max-height: 60vh; }
 /* the pan/zoom camera — a long, gently-decelerating glide into a line (easeOutExpo) */
 .lmap-cam { transform-origin: 0 0; transition: transform 1.05s cubic-bezier(0.16, 1, 0.3, 1); will-change: transform; }
-.lmap-lake { fill: #123049; stroke: #2A5074; stroke-width: 1.4; stroke-opacity: 0.7; }
+.lmap-lake { fill: var(--map-water); stroke: var(--map-water-edge); stroke-width: 1.4; stroke-opacity: 0.7; }
 .lmap-line .lmap-hit { fill: none; stroke: #000; stroke-opacity: 0; stroke-width: 15; cursor: pointer; }
 /* lines a touch bolder so they read on the dark water */
 .lmap-line .lmap-glow { fill: none; stroke: var(--c); stroke-opacity: 0.2; stroke-width: 8.5; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
 .lmap-line .lmap-core { fill: none; stroke: var(--c); stroke-width: 2.8; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
-.lmap-line .lmap-stn { fill: #0A0F15; stroke: var(--c); stroke-width: 1.2; pointer-events: none; }
+.lmap-line .lmap-stn { fill: var(--map-bg); stroke: var(--c); stroke-width: 1.2; pointer-events: none; }
 /* Station labels only appear on the FOCUSED (picked) line — big and readable,
    with overlapping ones culled. Sized generously so they survive the viewBox→
    screen downscale; counter-scaled by --inv so zoom level doesn't change them. */
-.lmap-line .lmap-lbl { display: none; fill: #FFFFFF; font-weight: 700; font-family: "Overpass", sans-serif;
-  font-size: calc(14px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(4px * var(--px, 1) * var(--inv, 1)); pointer-events: none; }
-.lmap-line .lmap-term { fill: #AEBAC7; font-weight: 700; font-family: "Overpass", sans-serif;
-  font-size: calc(13px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(3.5px * var(--px, 1) * var(--inv, 1)); pointer-events: none; }
+.lmap-line .lmap-lbl { display: none; fill: var(--map-ink); font-weight: 700; font-family: "Overpass", sans-serif;
+  font-size: calc(14px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: var(--map-ink-halo); stroke-width: calc(4px * var(--px, 1) * var(--inv, 1)); pointer-events: none; }
+.lmap-line .lmap-term { fill: var(--map-term); font-weight: 700; font-family: "Overpass", sans-serif;
+  font-size: calc(13px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: var(--map-ink-halo); stroke-width: calc(3.5px * var(--px, 1) * var(--inv, 1)); pointer-events: none; }
 /* hover = highlight only (no camera move): brighten + a slow flowing dash */
 .lmap-line.hovering .lmap-core { stroke-width: 4.6; stroke-dasharray: 16 12; animation: lmapFlow 1.4s linear infinite; }
 .lmap-line.hovering .lmap-glow { stroke-opacity: 0.6; stroke-width: 12; }
@@ -635,13 +659,13 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .lmap.focus .lmap-line.on .lmap-core { stroke-width: 4; }
 .lmap.focus .lmap-line.on .lmap-glow { stroke-opacity: 0.4; stroke-width: 12; }
 .lmap.focus .lmap-line.on .lmap-stn { r: 3.4; cursor: pointer; pointer-events: auto; }
-.lmap-line .lmap-stn.from { fill: var(--c); stroke: #fff; stroke-width: 2; r: 4.5; }
-.lmap-line .lmap-stn.to { fill: #fff; stroke: var(--c); stroke-width: 2.5; r: 4.5; }
-.lmap-line .lmap-lbl.pick { display: block; fill: #fff; font-weight: 800; }
-.lmap-hub { fill: #0A0F15; stroke: #fff; stroke-width: 2.2; }
-.lmap-hub-lbl { fill: #fff; font-weight: 800; font-family: "Overpass", sans-serif; font-size: calc(12px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: #05090E; stroke-width: calc(3px * var(--px, 1)); letter-spacing: 0.10em; }
+.lmap-line .lmap-stn.from { fill: var(--c); stroke: var(--map-ink); stroke-width: 2; r: 4.5; }
+.lmap-line .lmap-stn.to { fill: var(--map-ink); stroke: var(--c); stroke-width: 2.5; r: 4.5; }
+.lmap-line .lmap-lbl.pick { display: block; fill: var(--map-ink); font-weight: 800; }
+.lmap-hub { fill: var(--map-bg); stroke: var(--map-ink); stroke-width: 2.2; }
+.lmap-hub-lbl { fill: var(--map-ink); font-weight: 800; font-family: "Overpass", sans-serif; font-size: calc(12px * var(--px, 1) * var(--inv, 1)); paint-order: stroke; stroke: var(--map-ink-halo); stroke-width: calc(3px * var(--px, 1)); letter-spacing: 0.10em; }
 .lmap-train-halo { fill: #2FD53B; opacity: 0.25; animation: lmapPulse 1.6s ease-in-out infinite; }
-.lmap-train { fill: #fff; stroke: #2FD53B; stroke-width: 2.4; }
+.lmap-train { fill: var(--map-ink); stroke: #2FD53B; stroke-width: 2.4; }
 @keyframes lmapPulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.07; } }
 
 /* interactive zoom while a line is focused: gestures zoom the map, not the page */
@@ -650,15 +674,15 @@ button.ghost.wide.danger.confirm { background: #C0392B; border-color: #C0392B; c
 .lmap-ctrls { display: none; position: absolute; right: 10px; bottom: 10px; z-index: 5; flex-direction: column; gap: 6px; }
 .lmap-focused .lmap-ctrls { display: flex; }
 .lmap-ctrls button {
-  width: 36px; height: 36px; border-radius: 9px; border: 1px solid #24303F;
-  background: rgba(14, 21, 30, 0.82); backdrop-filter: blur(6px); color: #E9EDF2;
+  width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--surface); backdrop-filter: blur(6px); color: var(--text);
   font-size: 19px; font-weight: 700; line-height: 1; cursor: pointer;
 }
-.lmap-ctrls button:hover { border-color: var(--line); color: #fff; }
+.lmap-ctrls button:hover { border-color: var(--line); color: var(--line); }
 .lmap-ctrls button:active { transform: scale(0.94); }
 .lmap-hint {
   display: none; position: absolute; left: 10px; bottom: 12px; z-index: 5; pointer-events: none;
-  font-size: 11px; color: #AEBAC7; background: rgba(10, 15, 21, 0.7); padding: 4px 10px; border-radius: 999px;
+  font-size: 11px; color: var(--map-term); background: var(--surface); border: 1px solid var(--map-bg-edge); padding: 4px 10px; border-radius: 999px;
 }
 .lmap-focused .lmap-hint { display: block; }
 @media (prefers-reduced-motion: reduce) {

@@ -8,6 +8,18 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" id="favicon" href="icons/icon32.png">
   <meta name="theme-color" content="#0A0F15">
+  <script>
+    // Apply the saved theme before first paint (no flash). Mirrors resolveTheme() in app.js.
+    (function () {
+      try {
+        var pref = (JSON.parse(localStorage.getItem("mct") || "{}").theme) || "dark";
+        var t = pref === "light" ? "light"
+          : pref === "dark" ? "dark"
+          : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+    })();
+  </script>
   <link rel="preload" href="fonts/overpass-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="app.css">
@@ -75,6 +87,16 @@
           <h2>Your routes <span class="muted small" id="route-count"></span></h2>
           <div id="route-list"></div>
           <button id="add-route" class="ghost wide">+ Add a route</button>
+        </section>
+
+        <section class="sec" id="sec-appearance">
+          <h2>Appearance</h2>
+          <p class="muted small">Choose a theme, or follow your device setting.</p>
+          <div class="seg theme-seg" id="theme-seg" role="group" aria-label="Theme">
+            <button type="button" data-theme-pref="system">System</button>
+            <button type="button" data-theme-pref="light">Light</button>
+            <button type="button" data-theme-pref="dark">Dark</button>
+          </div>
         </section>
 
         <section class="sec" id="sec-notif">

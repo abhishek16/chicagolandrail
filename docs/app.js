@@ -10,11 +10,13 @@ function relLum(hex) {
   const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
   return 0.2126 * f(n >> 16 & 255) + 0.7152 * f(n >> 8 & 255) + 0.0722 * f(n & 255);
 }
-// Theme the UI to a line: lift the official color for contrast on the dark canvas,
-// and choose ink (text that sits ON a --line fill) that stays readable — dark ink
+// Theme the UI to a line: on the dark canvas lift the official color for contrast;
+// on light, use the official color as-is (lifting only brightens it into neon on
+// white). Ink (text that sits ON a --line fill) is chosen for readability — dark
 // on bright lines (UP-NW yellow), white on the rest.
 function applyLineTheme(rawColor) {
-  const c = lift(rawColor || WIZ_LINE);
+  const base = rawColor || WIZ_LINE;
+  const c = resolvedTheme === "light" ? base : lift(base);
   const root = document.documentElement.style;
   root.setProperty("--line", c);
   root.setProperty("--line-ink", relLum(c) > 0.62 ? "#08141F" : "#FFFFFF");
@@ -25,6 +27,9 @@ const POLL_MS = 30000;
 // Declared up here (not by the flap board below) because the visitor counter can
 // paint during init() — before a bottom-of-file const would be initialized (TDZ).
 const REDUCE_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Theme: user picks system/light/dark; resolvedTheme is the applied "light"|"dark".
+const themeMedia = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+let resolvedTheme = "dark";
 
 // ---------- state ----------
 const store = {
@@ -85,6 +90,8 @@ const X_HANDLES = {
 init();
 async function init() {
   initAnalytics();
+  applyTheme(); // sync resolvedTheme + data-theme (the inline head script set it pre-paint)
+  if (themeMedia) themeMedia.addEventListener("change", () => { if (themePref() === "system") applyTheme(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").then(r => swReg = r).catch(() => {});
   S.visits = (S.visits || 0) + 1; persist(); // paces the contextual briefing nudge
   initAbout();  // "Built by" sheet + live visitor counter
@@ -198,6 +205,10 @@ function showSetup(opts = {}) {
     : "This browser doesn't support notifications.";
 
   renderRouteList();
+  // Appearance: system / light / dark
+  const themeSeg = $("#theme-seg");
+  if (themeSeg) themeSeg.querySelectorAll("button").forEach(b => b.onclick = () => setThemePref(b.dataset.themePref));
+  syncThemeSeg();
   $("#add-route").onclick = () => showWizard("settings");
   $("#setup-done").onclick = () => { if (activeRoute()) showMain(); };
   // Erase-everything: two-tap confirm (native confirm() doesn't open in the Tesla browser).
@@ -856,6 +867,36 @@ function renderVisitSpark(svg, days) {
 function fmtVisitDay(ymd) { // "20260721" -> "Jul 21"
   const y = +ymd.slice(0, 4), m = +ymd.slice(4, 6) - 1, d = +ymd.slice(6, 8);
   return new Date(Date.UTC(y, m, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+// ============================================================
+// THEME (system / light / dark)
+// ============================================================
+// The preference is stored in S.theme; the applied value (resolvedTheme) is set as
+// data-theme on <html>. A tiny inline script in index.html applies it before first
+// paint (no flash); this keeps the in-memory state and accent in sync afterward.
+function themePref() { return S.theme || "dark"; }
+function resolveTheme(pref = themePref()) {
+  if (pref === "light") return "light";
+  if (pref === "dark") return "dark";
+  return themeMedia && !themeMedia.matches ? "light" : "dark"; // system: matches === prefers dark
+}
+function applyTheme() {
+  resolvedTheme = resolveTheme();
+  document.documentElement.setAttribute("data-theme", resolvedTheme);
+  const meta = $('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", resolvedTheme === "light" ? "#F2F5F9" : "#0A0F15");
+  const r = activeRoute();
+  if (r && lines.length) applyLineTheme(lineColor(r.line)); // re-tint accent for the new canvas
+}
+function setThemePref(pref) { S.theme = pref; persist(); applyTheme(); syncThemeSeg(); }
+function syncThemeSeg() {
+  const seg = $("#theme-seg"); if (!seg) return;
+  seg.querySelectorAll("button").forEach(b => {
+    const on = b.dataset.themePref === themePref();
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
 }
 
 // ============================================================
