@@ -12,11 +12,16 @@
 
 import AdmZip from "adm-zip";
 import { parse } from "csv-parse/sync";
+import { readFileSync, writeFileSync } from "node:fs";
 import { buildFares } from "./fares.js";
 
 const ZIP_URL = process.env.GTFS_ZIP_URL || "https://schedules.metrarail.com/gtfs/schedule.zip";
 const PUBLISHED_URL = process.env.PUBLISHED_URL || "https://schedules.metrarail.com/gtfs/published.txt";
 const DRY_RUN = process.argv.includes("--dry-run");
+// --emit <file>: write the computed KV pairs to a JSON file instead of calling the
+// Cloudflare API. Lets a deploy push data via `wrangler kv bulk put <file>` (which
+// uses wrangler's own auth) when the CF_API_TOKEN isn't available locally.
+const EMIT = process.argv.includes("--emit") ? process.argv[process.argv.indexOf("--emit") + 1] : null;
 
 function authHeaders() {
   const h = { "User-Agent": "metra-smart-commuter-tracker-ingest" };
@@ -25,6 +30,7 @@ function authHeaders() {
 }
 
 async function fetchBuffer(url) {
+  if (!/^https?:/i.test(url)) return readFileSync(url); // local path (offline / wrangler-based emit)
   const res = await fetch(url, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Fetch ${url} failed: ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
@@ -220,6 +226,12 @@ async function main() {
     } else {
       console.warn("Validation skipped: could not find Naperville/Union Station stops by name.");
     }
+  }
+
+  if (EMIT) {
+    writeFileSync(EMIT, JSON.stringify(kvWrites));
+    console.log(`\nEmitted ${kvWrites.length} KV pairs to ${EMIT} — push with: wrangler kv bulk put ${EMIT}`);
+    return;
   }
 
   if (DRY_RUN) {
