@@ -197,6 +197,7 @@ async function main() {
     console.log(`\nFares (as of ${fares.asOf}, ${fares.currency}):`);
     console.table(Object.fromEntries(Object.entries(fares.byPair)
       .map(([pair, f]) => [pair, { oneWay: f.oneWay, dayPass: f.day, monthly: f.monthly }])));
+    console.log(`Flat systemwide: Weekend Day Pass $${fares.flat.weekendDay.toFixed(2)}, Weekend Pass $${fares.flat.weekend.toFixed(2)}`);
   } else {
     console.warn("No fare table built — fare_attributes.txt / fare_rules.txt missing or empty.");
   }

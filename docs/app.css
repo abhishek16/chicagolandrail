@@ -824,6 +824,11 @@ button.built-by:focus-visible { outline: 2px solid var(--line); outline-offset: 
   text-align: right; white-space: nowrap; font-family: var(--board);
   font-variant-numeric: tabular-nums; font-weight: 700; font-size: 16px; padding-left: 12px;
 }
+.fare-table .fare-amt.na { color: var(--muted); font-weight: 400; } /* missing price → muted em-dash */
+.fare-subhead {
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted); margin: 18px 0 2px;
+}
 .fare-tip {
   margin: 16px 0 4px; padding: 12px 14px; border-radius: 12px;
   background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--line);

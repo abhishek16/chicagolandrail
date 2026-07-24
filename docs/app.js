@@ -938,24 +938,39 @@ function openFare() {
 }
 function closeFare() { const m = $("#fare-modal"); if (m) m.classList.add("hidden"); }
 
+// One fare row. A null amount renders a muted "—" (Metra didn't price it / a data
+// gap) rather than the row silently disappearing.
+function fareRow(name, sub, amt) {
+  return `<tr><td class="fare-name"><b>${esc(name)}</b><span class="fare-sub">${esc(sub)}</span></td>
+    <td class="fare-amt${amt == null ? " na" : ""}">${amt == null ? "—" : fareMoney(amt)}</td></tr>`;
+}
+
 function renderFareSheet(fare) {
   const body = $("#fare-body"); if (!body) return;
   const r = activeRoute();
   const heading = r
     ? `${esc(r.homeName)} <span class="arrow">⇆</span> ${esc(r.workName)} · ${esc(zoneLabel(fare.zonePair))}`
     : esc(zoneLabel(fare.zonePair));
-  const rows = [
+  // Zone-based commuter fares — always shown (missing ones read "—", never vanish).
+  const commuter = [
     ["One-way", "single ride", fare.oneWay],
     ["Day Pass", "unlimited rides today", fare.day],
     ["Monthly Pass", "unlimited for the calendar month", fare.monthly],
-  ].filter(([, , amt]) => amt != null).map(([name, sub, amt]) =>
-    `<tr><td class="fare-name"><b>${name}</b><span class="fare-sub">${sub}</span></td>
-      <td class="fare-amt">${fareMoney(amt)}</td></tr>`).join("");
+  ].map(([n, s, a]) => fareRow(n, s, a)).join("");
+  // Flat, systemwide weekend passes (only shown when we have them).
+  const weekend = [
+    ["Weekend Day Pass", "unlimited systemwide · Sat, Sun, or holiday", fare.weekendDay],
+    ["Weekend Pass", "unlimited systemwide · Sat + Sun (Ventra app)", fare.weekend],
+  ].filter(([, , a]) => a != null);
+  const weekendHtml = weekend.length ? `
+    <p class="fare-subhead">Weekends &amp; holidays</p>
+    <table class="fare-table"><tbody>${weekend.map(([n, s, a]) => fareRow(n, s, a)).join("")}</tbody></table>` : "";
   body.innerHTML = `
     <p class="fare-route muted small">${heading}</p>
-    <table class="fare-table"><tbody>${rows}</tbody></table>
+    <table class="fare-table"><tbody>${commuter}</tbody></table>
     ${fareTipHtml(fare)}
-    <p class="fare-foot muted small">Full fare (adult). Reduced fares apply for seniors, riders with disabilities, K–12 students, and active-duty military. Prices from Metra${fare.asOf ? `, as of ${esc(fmtFareAsOf(fare.asOf))}` : ""}.</p>`;
+    ${weekendHtml}
+    <p class="fare-foot muted small">Full fare (adult); reduced fares apply for seniors, riders with disabilities, K–12 students, and active-duty military. Weekend passes are a flat systemwide rate. Prices from Metra${fare.asOf ? `, as of ${esc(fmtFareAsOf(fare.asOf))}` : ""}.</p>`;
 }
 
 // "Ride N+ round trips a month? A Monthly pays for itself" + rough monthly saving

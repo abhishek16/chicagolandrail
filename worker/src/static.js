@@ -191,9 +191,12 @@ export function computeFare(fares, stations, from, to) {
   if (!f || f.oneWay == null) return null;
   const roundTrip = Math.round(f.oneWay * 200) / 100; // 2 · oneWay, cent-safe
   const breakEvenRoundTrips = f.monthly != null && roundTrip > 0 ? Math.ceil(f.monthly / roundTrip) : null;
+  const flat = fares.flat || {};
   return {
     oneWay: f.oneWay, day: f.day, monthly: f.monthly,
     roundTrip, breakEvenRoundTrips,
+    weekendDay: flat.weekendDay ?? null, // flat systemwide passes (same for every zone)
+    weekend: flat.weekend ?? null,
     zonePair: key, currency: fares.currency || "USD", asOf: fares.asOf || null,
   };
 }
