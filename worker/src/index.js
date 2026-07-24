@@ -9,7 +9,7 @@
 //   - optional Cloudflare rate-limiting rule on the route (real quota control)
 // The Metra API key stays server-side in a Worker secret regardless.
 
-import { kv, json as baseJson, bad, nextScheduled, timetableFor, secToClock, chicagoParts, shiftDate } from "./static.js";
+import { kv, json as baseJson, bad, nextScheduled, timetableFor, computeFare, faresTable, secToClock, chicagoParts, shiftDate } from "./static.js";
 import { fetchFeed, indexTripUpdates, delayAt, alertsForRoute, positionFor } from "./realtime.js";
 import { runPushCycle } from "./poller.js";
 import { weatherFor } from "./weather.js";
@@ -210,10 +210,12 @@ async function handleNext(url, env, waitUntil) {
     } catch { /* positions optional */ }
   }
 
+  const fare = computeFare(await faresTable(env), stations, from, to);
+
   return json(env, {
     route, from, to,
     generatedAt: new Date().toISOString(),
-    realtime, rtError, serviceNote, alerts, position: pos,
+    realtime, rtError, serviceNote, alerts, position: pos, fare,
     stations: stations
       .filter(s => within(stations, s, from, to))
       .map(s => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lon })),

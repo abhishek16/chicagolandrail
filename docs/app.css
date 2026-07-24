@@ -792,6 +792,46 @@ button.built-by:focus-visible { outline: 2px solid var(--line); outline-offset: 
 .visits-spark { display: block; width: 160px; height: 34px; margin: 16px auto 4px; overflow: visible; }
 .visits-total { margin-top: 10px; }
 .visits-total b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* ---- fares: subtle strip (above the board) + tap-to-open sheet ---- */
+.fare-strip { padding: 0 16px; }
+.fare-strip-btn {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  margin: 12px 0 0; padding: 9px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  color: var(--muted); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.fare-strip-btn:hover { border-color: var(--line); }
+.fare-strip-btn:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; }
+.fare-ico { color: var(--line); flex-shrink: 0; display: block; }
+.fare-lead { color: var(--text); }
+.fare-lead b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.fare-lead .fl-unit { color: var(--muted); font-weight: 400; }
+.fare-more {
+  margin-left: auto; color: var(--line); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+}
+.fare-more .caret { font-size: 10px; }
+
+.fare-route { margin: 2px 0 14px; }
+.fare-table { width: 100%; border-collapse: collapse; }
+.fare-table td { padding: 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.fare-table tr:last-child td { border-bottom: 0; }
+.fare-table .fare-name { font-size: 15px; }
+.fare-table .fare-name b { font-weight: 600; }
+.fare-table .fare-sub { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.fare-table .fare-amt {
+  text-align: right; white-space: nowrap; font-family: var(--board);
+  font-variant-numeric: tabular-nums; font-weight: 700; font-size: 16px; padding-left: 12px;
+}
+.fare-tip {
+  margin: 16px 0 4px; padding: 12px 14px; border-radius: 12px;
+  background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--line);
+  font-size: 13px; line-height: 1.5; color: var(--text);
+}
+.fare-tip b { color: var(--line); }
+.fare-foot { margin: 12px 0 0; }
+
 .disclaimer {
   padding: 6px 16px calc(14px + env(safe-area-inset-bottom));
   font-size: 10px; line-height: 1.5; color: var(--muted); text-align: center;

@@ -155,10 +155,45 @@ export async function timetableFor(env, route, from, to, dateStr = null) {
       skipped: t.skipped,
     }));
 
+  const fare = computeFare(await faresTable(env), stopsData.stations, from, to);
   return {
     route, from, to,
     date: day.dateStr,
     serviceNote: (cal.ex[day.dateStr] || []).length ? "modified" : null,
     trains,
+    fare,
+  };
+}
+
+// ---- Fares ----
+
+// The precomputed fare table (ingest writes it). Missing → null, never throws, so
+// fare display simply degrades to absent.
+export async function faresTable(env) {
+  try { return await env.GTFS.get("fares", "json"); } catch { return null; }
+}
+
+// Fare for a from→to trip, derived from the `fares` blob + station zones. Metra
+// prices by zone pair (symmetric), so direction doesn't matter. Returns null when
+// fares or either station's zone is unavailable. `breakEvenRoundTrips` = the number
+// of round trips per month at which a Monthly pass matches pay-per-ride (⌈monthly /
+// (2·oneWay)⌉); above it the Monthly wins.
+export function computeFare(fares, stations, from, to) {
+  if (!fares || !fares.byPair || !Array.isArray(stations)) return null;
+  const zoneOf = id => {
+    const s = stations.find(x => x.id === id);
+    return s && s.zone != null && s.zone !== "" ? String(s.zone) : null;
+  };
+  const zf = zoneOf(from), zt = zoneOf(to);
+  if (zf == null || zt == null) return null;
+  const key = zf <= zt ? `${zf}-${zt}` : `${zt}-${zf}`; // must match ingest's pairKey()
+  const f = fares.byPair[key];
+  if (!f || f.oneWay == null) return null;
+  const roundTrip = Math.round(f.oneWay * 200) / 100; // 2 · oneWay, cent-safe
+  const breakEvenRoundTrips = f.monthly != null && roundTrip > 0 ? Math.ceil(f.monthly / roundTrip) : null;
+  return {
+    oneWay: f.oneWay, day: f.day, monthly: f.monthly,
+    roundTrip, breakEvenRoundTrips,
+    zonePair: key, currency: fares.currency || "USD", asOf: fares.asOf || null,
   };
 }

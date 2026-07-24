@@ -134,6 +134,7 @@
       <div id="alerts"></div>
       <div id="banner" class="banner hidden"></div>
       <div id="nudge"></div>
+      <div id="fare-strip" class="fare-strip hidden"></div>
       <main id="content">
         <div class="muted center">Loading trains…</div>
       </main>
@@ -278,6 +279,19 @@
         </label>
         <button id="oo-go" class="primary">View trip</button>
         <p id="oo-error" class="error hidden"></p>
+      </div>
+    </div>
+
+    <!-- ============ FARES SHEET (opened from the subtle fare strip) ============ -->
+    <div id="fare-modal" class="sheet-backdrop hidden">
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fare-title">
+        <div class="sheet-head">
+          <h2 id="fare-title">Fares &amp; passes</h2>
+          <button id="fare-close" class="icon-btn" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
+        </div>
+        <div id="fare-body"></div>
       </div>
     </div>
 

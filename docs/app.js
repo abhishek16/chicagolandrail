@@ -64,6 +64,7 @@ let oneOff = null;               // transient one-off trip (not saved), override
 let stripReversed = {};          // per-direction reverse flag for the route diagram (point: reversible list)
 let ooStations = [];             // stations for the one-off line picker
 let lastVisitStats = null;       // last-known /api/visits stats for the About sheet
+let lastFare = null;             // fare for the active route (for the fare sheet)
 
 // ---------- persistent offline cache (survives reload/underground) ----------
 const cacheKey = id => "mct_cache_" + id;
@@ -107,6 +108,7 @@ async function init() {
   try { lines = await api("/api/lines"); } catch { lines = []; }
   api("/api/meta").then(m => { meta = m; }).catch(() => {}); // for stale-data warning
   initOneOff();
+  initFare();   // fare sheet (opened from the subtle fare strip)
   if (!activeRoute()) showWizard("boot"); else showMain();
   syncPush(); // refresh push subscription + line list on load
 }
@@ -886,6 +888,90 @@ function fmtVisitDay(ymd) { // "20260721" -> "Jul 21"
 }
 
 // ============================================================
+// FARES — a subtle "$X one-way" strip above the board that opens a full fare sheet
+// (one-way / day pass / monthly + the break-even tip). Fares come from the Worker
+// (/api/next + /api/timetable); the whole thing hides quietly when unavailable.
+// The fare is symmetric (priced by zone pair), so one strip serves both directions
+// and the one-off trip board, which reuses this same main view.
+// ============================================================
+const FARE_ICON = `<svg class="fare-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 1.7 1.7 0 0 0 0 3.4 1.7 1.7 0 0 0 0 3.4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 1.7 1.7 0 0 0 0-3.4 1.7 1.7 0 0 0 0-3.4z"/><path d="M14.5 6.6v10.8" stroke-dasharray="1.4 2.2"/></svg>`;
+
+// Metra prices are always to the cent on the fare chart ($6.75, $135.00).
+function fareMoney(n) { return n == null ? "" : "$" + Number(n).toFixed(2); }
+// "Zone 1–4" (or "Zone 3" when both ends sit in one zone).
+function zoneLabel(pair) {
+  if (!pair) return "";
+  const [a, b] = String(pair).split("-");
+  return a === b ? `Zone ${a}` : `Zone ${a}–${b}`;
+}
+function fmtFareAsOf(asOf) { // "2026-07" -> "Jul 2026"
+  const m = /^(\d{4})-(\d{2})/.exec(String(asOf || ""));
+  if (!m) return String(asOf || "");
+  return new Date(Date.UTC(+m[1], +m[2] - 1, 1)).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+function initFare() {
+  const close = $("#fare-close"), modal = $("#fare-modal");
+  if (close) close.onclick = closeFare;
+  if (modal) modal.onclick = e => { if (e.target === modal) closeFare(); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeFare(); });
+}
+
+// Paint (or hide) the strip. Stores the fare so the sheet can render on tap.
+function renderFareStrip(fare) {
+  const el = $("#fare-strip"); if (!el) return;
+  lastFare = fare && fare.oneWay != null ? fare : null;
+  if (!lastFare) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+  el.classList.remove("hidden");
+  el.innerHTML = `<button type="button" class="fare-strip-btn" aria-haspopup="dialog">
+    ${FARE_ICON}
+    <span class="fare-lead"><b>${fareMoney(lastFare.oneWay)}</b> <span class="fl-unit">one-way</span></span>
+    <span class="fare-more">Fares <span class="caret">▾</span></span>
+  </button>`;
+  el.querySelector(".fare-strip-btn").onclick = openFare;
+}
+
+function openFare() {
+  const modal = $("#fare-modal"); if (!modal || !lastFare) return;
+  renderFareSheet(lastFare);
+  modal.classList.remove("hidden");
+}
+function closeFare() { const m = $("#fare-modal"); if (m) m.classList.add("hidden"); }
+
+function renderFareSheet(fare) {
+  const body = $("#fare-body"); if (!body) return;
+  const r = activeRoute();
+  const heading = r
+    ? `${esc(r.homeName)} <span class="arrow">⇆</span> ${esc(r.workName)} · ${esc(zoneLabel(fare.zonePair))}`
+    : esc(zoneLabel(fare.zonePair));
+  const rows = [
+    ["One-way", "single ride", fare.oneWay],
+    ["Day Pass", "unlimited rides today", fare.day],
+    ["Monthly Pass", "unlimited for the calendar month", fare.monthly],
+  ].filter(([, , amt]) => amt != null).map(([name, sub, amt]) =>
+    `<tr><td class="fare-name"><b>${name}</b><span class="fare-sub">${sub}</span></td>
+      <td class="fare-amt">${fareMoney(amt)}</td></tr>`).join("");
+  body.innerHTML = `
+    <p class="fare-route muted small">${heading}</p>
+    <table class="fare-table"><tbody>${rows}</tbody></table>
+    ${fareTipHtml(fare)}
+    <p class="fare-foot muted small">Full fare (adult). Reduced fares apply for seniors, riders with disabilities, K–12 students, and active-duty military. Prices from Metra${fare.asOf ? `, as of ${esc(fmtFareAsOf(fare.asOf))}` : ""}.</p>`;
+}
+
+// "Ride N+ round trips a month? A Monthly pays for itself" + rough monthly saving
+// at a typical ~20 commuting days. Break-even = ⌈monthly / (2·oneWay)⌉ round trips.
+function fareTipHtml(fare) {
+  if (fare.monthly == null || fare.oneWay == null) return "";
+  const rt = fare.roundTrip || Math.round(fare.oneWay * 200) / 100;
+  const be = fare.breakEvenRoundTrips || (rt > 0 ? Math.ceil(fare.monthly / rt) : null);
+  if (!be) return "";
+  const typical = 20;
+  const save = Math.round(typical * rt - fare.monthly);
+  const saveTxt = save > 0 ? ` At about ${typical} round trips a month you'd save roughly <b>$${save}</b>.` : "";
+  return `<div class="fare-tip"><b>Ride ${be}+ round trips a month?</b> A Monthly pass pays for itself.${saveTxt}</div>`;
+}
+
+// ============================================================
 // THEME (system / light / dark)
 // ============================================================
 // The preference is stored in S.theme; the applied value (resolvedTheme) is set as
@@ -942,6 +1028,7 @@ function showMain() {
   $("#route-title").onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toLines(); } };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup({ scrollTo: "#sec-notif" }); };
   renderSocial(route);
+  renderFareStrip(null); // clear any prior route's fare; render() refills once data lands
   loadCache(); // hydrate last-good board so an offline open shows something
   startPolling();
 }
@@ -1096,6 +1183,7 @@ function render(dirs, offline) {
   } else b.className = "banner hidden";
 
   paintContent(dirs, offline);
+  renderFareStrip(first && first.fare); // one-way fare strip (same for both directions)
 
   dirs.forEach(loadWeather); // fill the weather line under each hero (async, optional)
   renderNudge();             // contextual feature discovery (alerts, briefing)
@@ -1296,7 +1384,7 @@ async function renderTimetable(dirs, seq = reqSeq) {
   let html = `<div class="datebar">${chips}
     <select id="tt-date" aria-label="Pick a date">${dateOpts}</select></div>`;
 
-  let note = null;
+  let note = null, fare = null;
   for (const d of dirs) {
     const [from, to] = d === "HW" ? [route.home, route.work] : [route.work, route.home];
     html += `<div class="direction-head">${dirTitle(d)}</div>`;
@@ -1304,6 +1392,7 @@ async function renderTimetable(dirs, seq = reqSeq) {
       const data = await api(`/api/timetable?route=${encodeURIComponent(route.line)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${ttDate.replace(/-/g, "")}`);
       if (seq !== reqSeq) return; // route/date changed mid-load — abandon this stale timetable
       note = note || data.serviceNote;
+      fare = fare || data.fare;
       html += data.trains.length
         ? `<div class="list tt">` + data.trains.map(t => `
             <div class="row ${t.class === "E" ? "express" : ""}">
@@ -1320,6 +1409,7 @@ async function renderTimetable(dirs, seq = reqSeq) {
   }
   if (seq !== reqSeq) return; // a newer route/view took over while we awaited — don't paint
   $("#content").innerHTML = html;
+  renderFareStrip(fare); // same fare applies to the scheduled board
   if (note) {
     const b = $("#banner");
     b.textContent = "Modified schedule (holiday or special service).";

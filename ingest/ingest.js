@@ -12,6 +12,7 @@
 
 import AdmZip from "adm-zip";
 import { parse } from "csv-parse/sync";
+import { buildFares } from "./fares.js";
 
 const ZIP_URL = process.env.GTFS_ZIP_URL || "https://schedules.metrarail.com/gtfs/schedule.zip";
 const PUBLISHED_URL = process.env.PUBLISHED_URL || "https://schedules.metrarail.com/gtfs/published.txt";
@@ -83,6 +84,10 @@ async function main() {
   const calendar = readCsv(zip, "calendar.txt");
   let calendarDates = [];
   try { calendarDates = readCsv(zip, "calendar_dates.txt"); } catch { /* optional */ }
+  // Fares (GTFS-Fares v1). One-way prices live here; Day/Monthly are paired in fares.js.
+  let fareAttributes = [], fareRules = [];
+  try { fareAttributes = readCsv(zip, "fare_attributes.txt"); } catch { /* optional */ }
+  try { fareRules = readCsv(zip, "fare_rules.txt"); } catch { /* optional */ }
 
   console.log(`Parsed: ${routes.length} routes, ${stops.length} stops, ${trips.length} trips, ${stopTimes.length} stop_times`);
 
@@ -143,7 +148,15 @@ async function main() {
 
     const stations = order.map(id => {
       const s = stopById.get(id);
-      return { id, name: s ? s.stop_name : id, lat: s ? Number(s.stop_lat) : null, lon: s ? Number(s.stop_lon) : null };
+      return {
+        id,
+        name: s ? s.stop_name : id,
+        lat: s ? Number(s.stop_lat) : null,
+        lon: s ? Number(s.stop_lon) : null,
+        // zone_id drives fare lookup (Metra prices by zone pair). Kept as a string
+        // ("1".."4"); null when the feed omits it so fare display just degrades.
+        zone: s && s.zone_id != null && String(s.zone_id).trim() !== "" ? String(s.zone_id).trim() : null,
+      };
     });
 
     const compactTrips = routeTrips.map(t => {
@@ -167,7 +180,20 @@ async function main() {
   kvWrites.push({ key: "cal", value: JSON.stringify(cal) });
   kvWrites.push({ key: "meta", value: JSON.stringify({ publishedAt, ingestedAt: new Date().toISOString() }) });
 
+  // System-wide fare table (route_id is blank in Metra's fare_rules → one table for all lines).
+  const fares = buildFares(fareAttributes, fareRules);
+  if (fares) kvWrites.push({ key: "fares", value: JSON.stringify(fares) });
+
   console.table(report);
+
+  // ---- Validation: fare table (one-way from feed, Day/Monthly paired in fares.js) ----
+  if (fares) {
+    console.log(`\nFares (as of ${fares.asOf}, ${fares.currency}):`);
+    console.table(Object.fromEntries(Object.entries(fares.byPair)
+      .map(([pair, f]) => [pair, { oneWay: f.oneWay, dayPass: f.day, monthly: f.monthly }])));
+  } else {
+    console.warn("No fare table built — fare_attributes.txt / fare_rules.txt missing or empty.");
+  }
 
   // ---- Validation: express classification sanity check (BNSF Naperville → Chicago) ----
   const bnsf = kvWrites.find(w => w.key.startsWith("sched:") && /bnsf/i.test(w.key));
