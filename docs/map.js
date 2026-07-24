@@ -41,7 +41,7 @@ const SHORE = [
   [41.60, -87.25], [41.55, -86.90],
 ];
 
-export function createMap(host, { lines, stopsByLine, segmentsByLine = {}, onLine, onStation, onHover }) {
+export function createMap(host, { lines, stopsByLine, segmentsByLine = {}, shapesByLine = {}, onLine, onStation, onHover }) {
   const geo = {};
   for (const l of lines) geo[l.id] = (stopsByLine[l.id] || []).filter(s => s.lat != null && s.lon != null);
   const all = Object.values(geo).flat();
@@ -90,13 +90,19 @@ export function createMap(host, { lines, stopsByLine, segmentsByLine = {}, onLin
     const sts = geo[l.id];
     if (sts.length < 2) continue;
     const c = lift(l.color);
-    // Draw the real track topology from branch segments (edges) when available, so a
-    // Y-line draws both spurs; fall back to a single polyline through the stops.
+    // Prefer the real track geometry (curved shape polylines) so each line follows
+    // its actual route; fall back to branch segments (straight hops that still draw
+    // both spurs of a Y-line), then a single polyline through the stops. Multiple
+    // shape polylines (branches) live in one <path>, so their shared trunk overlaps
+    // without stacking stroke opacity.
     const coord = {}; for (const s of sts) coord[s.id] = pt(s).map(r1).join(",");
+    const shapes = (shapesByLine[l.id] || []).filter(poly => Array.isArray(poly) && poly.length > 1);
     const segs = (segmentsByLine[l.id] || []).filter(([a, b]) => coord[a] && coord[b]);
-    const path = segs.length
-      ? segs.map(([a, b]) => `M ${coord[a]} L ${coord[b]}`).join(" ")
-      : "M " + sts.map(st => pt(st).map(r1).join(",")).join(" L ");
+    const path = shapes.length
+      ? shapes.map(poly => "M " + poly.map(([la, lo]) => `${r1(px(lo))},${r1(py(la))}`).join(" L ")).join(" ")
+      : segs.length
+        ? segs.map(([a, b]) => `M ${coord[a]} L ${coord[b]}`).join(" ")
+        : "M " + sts.map(st => pt(st).map(r1).join(",")).join(" L ");
     const g = el("g", { class: "lmap-line", "data-id": l.id });
     g.style.setProperty("--c", c);
     // non-scaling-stroke keeps line/dot widths crisp (constant screen px) when zoomed

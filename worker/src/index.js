@@ -94,7 +94,9 @@ async function route(request, env, ctx) {
           // its real spurs instead of one zigzag through both terminals.
           let segments = [];
           try { segments = branchSegments((await kv(env, `sched:${route}`)).trips, data.stations); } catch { /* optional */ }
-          return json(env, { route, stations: data.stations, segments }, 200, 86400);
+          // Real track geometry (curved polylines) when the ingest has it; the map
+          // falls back to `segments` (straight hops) otherwise.
+          return json(env, { route, stations: data.stations, segments, shapes: data.shapes || [] }, 200, 86400);
         }
         case "/api/alerts": {
           const route = url.searchParams.get("route");

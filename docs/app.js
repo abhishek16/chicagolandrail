@@ -414,15 +414,16 @@ let mapGeo = null;     // { stopsByLine } — every line's station geometry, for
 // Load every line's stations once (edge-cached), so the whole system can be drawn.
 async function ensureMapGeo() {
   if (mapGeo) return mapGeo;
-  const stopsByLine = {}, segmentsByLine = {};
+  const stopsByLine = {}, segmentsByLine = {}, shapesByLine = {};
   await Promise.all(lines.map(async l => {
     try {
       const d = await api(`/api/stops?route=${encodeURIComponent(l.id)}`);
       stopsByLine[l.id] = d.stations || [];
       segmentsByLine[l.id] = d.segments || [];
-    } catch { stopsByLine[l.id] = []; segmentsByLine[l.id] = []; }
+      shapesByLine[l.id] = d.shapes || []; // real track geometry (curves), when ingested
+    } catch { stopsByLine[l.id] = []; segmentsByLine[l.id] = []; shapesByLine[l.id] = []; }
   }));
-  mapGeo = { stopsByLine, segmentsByLine };
+  mapGeo = { stopsByLine, segmentsByLine, shapesByLine };
   return mapGeo;
 }
 
@@ -441,9 +442,9 @@ async function buildWizMap() {
   host.classList.add("loading");
   host.innerHTML = `<div class="lmap-load">Drawing the map…</div>`;
   try {
-    const { stopsByLine, segmentsByLine } = await ensureMapGeo();
+    const { stopsByLine, segmentsByLine, shapesByLine } = await ensureMapGeo();
     if (!wiz) return; // wizard was closed while geometry loaded
-    wizMap = createMap(host, { lines, stopsByLine, segmentsByLine, onLine: onMapLine, onStation: onMapStation, onHover: onMapHover });
+    wizMap = createMap(host, { lines, stopsByLine, segmentsByLine, shapesByLine, onLine: onMapLine, onStation: onMapStation, onHover: onMapHover });
     host.classList.remove("loading");
     applyMapState();
   } catch {

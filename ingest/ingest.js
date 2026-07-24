@@ -14,6 +14,7 @@ import AdmZip from "adm-zip";
 import { parse } from "csv-parse/sync";
 import { readFileSync, writeFileSync } from "node:fs";
 import { buildFares } from "./fares.js";
+import { buildRouteShapes } from "./shapes.js";
 
 const ZIP_URL = process.env.GTFS_ZIP_URL || "https://schedules.metrarail.com/gtfs/schedule.zip";
 const PUBLISHED_URL = process.env.PUBLISHED_URL || "https://schedules.metrarail.com/gtfs/published.txt";
@@ -94,6 +95,11 @@ async function main() {
   let fareAttributes = [], fareRules = [];
   try { fareAttributes = readCsv(zip, "fare_attributes.txt"); } catch { /* optional */ }
   try { fareRules = readCsv(zip, "fare_rules.txt"); } catch { /* optional */ }
+  // Real track geometry (curves) for the map, per route. Optional; map falls back
+  // to straight segments between stops when absent.
+  let shapesRows = [];
+  try { shapesRows = readCsv(zip, "shapes.txt"); } catch { /* optional */ }
+  const routeShapes = buildRouteShapes(shapesRows, trips);
 
   console.log(`Parsed: ${routes.length} routes, ${stops.length} stops, ${trips.length} trips, ${stopTimes.length} stop_times`);
 
@@ -177,9 +183,9 @@ async function main() {
       };
     }).filter(t => t.st.length > 1);
 
-    kvWrites.push({ key: `stops:${routeId}`, value: JSON.stringify({ order, stations }) });
+    kvWrites.push({ key: `stops:${routeId}`, value: JSON.stringify({ order, stations, shapes: routeShapes[routeId] || [] }) });
     kvWrites.push({ key: `sched:${routeId}`, value: JSON.stringify({ trips: compactTrips }) });
-    report.push({ routeId, stations: stations.length, trips: compactTrips.length });
+    report.push({ routeId, stations: stations.length, trips: compactTrips.length, shapePaths: (routeShapes[routeId] || []).length });
   }
 
   kvWrites.push({ key: "lines", value: JSON.stringify(lines) });
