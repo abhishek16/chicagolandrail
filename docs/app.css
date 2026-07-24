@@ -793,25 +793,16 @@ button.built-by:focus-visible { outline: 2px solid var(--line); outline-offset: 
 .visits-total { margin-top: 10px; }
 .visits-total b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 700; }
 
-/* ---- fares: subtle strip (above the board) + tap-to-open sheet ---- */
-.fare-strip { padding: 0 16px; }
-.fare-strip-btn {
-  display: flex; align-items: center; gap: 9px; width: 100%;
-  margin: 12px 0 0; padding: 9px 12px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  color: var(--muted); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+/* ---- fares: quiet footer link → tap-to-open sheet ---- */
+.fare-link {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  width: 100%; margin: 0; padding: 14px 16px 2px;
+  background: none; border: 0; cursor: pointer; font: inherit;
+  font-size: 13px; font-weight: 600; color: var(--line);
 }
-.fare-strip-btn:hover { border-color: var(--line); }
-.fare-strip-btn:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; }
-.fare-ico { color: var(--line); flex-shrink: 0; display: block; }
-.fare-lead { color: var(--text); }
-.fare-lead b { font-weight: 700; font-variant-numeric: tabular-nums; }
-.fare-lead .fl-unit { color: var(--muted); font-weight: 400; }
-.fare-more {
-  margin-left: auto; color: var(--line); font-weight: 600;
-  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
-}
-.fare-more .caret { font-size: 10px; }
+.fare-link .fare-ico { color: var(--line); flex-shrink: 0; display: block; }
+.fare-link:hover { text-decoration: underline; }
+.fare-link:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; border-radius: 6px; }
 
 .fare-route { margin: 2px 0 14px; }
 .fare-table { width: 100%; border-collapse: collapse; }

@@ -888,13 +888,12 @@ function fmtVisitDay(ymd) { // "20260721" -> "Jul 21"
 }
 
 // ============================================================
-// FARES — a subtle "$X one-way" strip above the board that opens a full fare sheet
-// (one-way / day pass / monthly + the break-even tip). Fares come from the Worker
-// (/api/next + /api/timetable); the whole thing hides quietly when unavailable.
-// The fare is symmetric (priced by zone pair), so one strip serves both directions
+// FARES — a quiet "Fares & passes" link in the footer opens the full fare sheet
+// (one-way / day pass / monthly + break-even, and weekend passes). Fares come from
+// the Worker (/api/next + /api/timetable); the link hides quietly when unavailable.
+// The fare is symmetric (priced by zone pair), so one link serves both directions
 // and the one-off trip board, which reuses this same main view.
 // ============================================================
-const FARE_ICON = `<svg class="fare-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 1.7 1.7 0 0 0 0 3.4 1.7 1.7 0 0 0 0 3.4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 1.7 1.7 0 0 0 0-3.4 1.7 1.7 0 0 0 0-3.4z"/><path d="M14.5 6.6v10.8" stroke-dasharray="1.4 2.2"/></svg>`;
 
 // Metra prices are always to the cent on the fare chart ($6.75, $135.00).
 function fareMoney(n) { return n == null ? "" : "$" + Number(n).toFixed(2); }
@@ -911,24 +910,19 @@ function fmtFareAsOf(asOf) { // "2026-07" -> "Jul 2026"
 }
 
 function initFare() {
+  const link = $("#fare-link");
+  if (link) link.onclick = openFare;
   const close = $("#fare-close"), modal = $("#fare-modal");
   if (close) close.onclick = closeFare;
   if (modal) modal.onclick = e => { if (e.target === modal) closeFare(); };
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeFare(); });
 }
 
-// Paint (or hide) the strip. Stores the fare so the sheet can render on tap.
-function renderFareStrip(fare) {
-  const el = $("#fare-strip"); if (!el) return;
+// Show/hide the footer "Fares & passes" link and remember the fare for the sheet.
+function renderFareLink(fare) {
   lastFare = fare && fare.oneWay != null ? fare : null;
-  if (!lastFare) { el.classList.add("hidden"); el.innerHTML = ""; return; }
-  el.classList.remove("hidden");
-  el.innerHTML = `<button type="button" class="fare-strip-btn" aria-haspopup="dialog">
-    ${FARE_ICON}
-    <span class="fare-lead"><b>${fareMoney(lastFare.oneWay)}</b> <span class="fl-unit">one-way</span></span>
-    <span class="fare-more">Fares <span class="caret">▾</span></span>
-  </button>`;
-  el.querySelector(".fare-strip-btn").onclick = openFare;
+  const link = $("#fare-link");
+  if (link) link.classList.toggle("hidden", !lastFare);
 }
 
 function openFare() {
@@ -1043,7 +1037,7 @@ function showMain() {
   $("#route-title").onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toLines(); } };
   $("#settings-btn").onclick = () => { stopPolling(); showSetup({ scrollTo: "#sec-notif" }); };
   renderSocial(route);
-  renderFareStrip(null); // clear any prior route's fare; render() refills once data lands
+  renderFareLink(null); // clear any prior route's fare; render() refills once data lands
   loadCache(); // hydrate last-good board so an offline open shows something
   startPolling();
 }
@@ -1198,7 +1192,7 @@ function render(dirs, offline) {
   } else b.className = "banner hidden";
 
   paintContent(dirs, offline);
-  renderFareStrip(first && first.fare); // one-way fare strip (same for both directions)
+  renderFareLink(first && first.fare); // footer fares link (same fare for both directions)
 
   dirs.forEach(loadWeather); // fill the weather line under each hero (async, optional)
   renderNudge();             // contextual feature discovery (alerts, briefing)
@@ -1424,7 +1418,7 @@ async function renderTimetable(dirs, seq = reqSeq) {
   }
   if (seq !== reqSeq) return; // a newer route/view took over while we awaited — don't paint
   $("#content").innerHTML = html;
-  renderFareStrip(fare); // same fare applies to the scheduled board
+  renderFareLink(fare); // same fare applies to the scheduled board
   if (note) {
     const b = $("#banner");
     b.textContent = "Modified schedule (holiday or special service).";
